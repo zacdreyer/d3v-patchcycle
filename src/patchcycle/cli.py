@@ -33,6 +33,9 @@ from patchcycle.installer import Installer, _real_systemd, schedule_to_oncalenda
 from patchcycle.lock import ExecutionLock
 from patchcycle.logging_setup import collect_config_secrets, configure_logging
 from patchcycle.models import OsIdentity
+from patchcycle.notify.base import Notifier
+from patchcycle.notify.smtp import SmtpNotifier
+from patchcycle.notify.webhook import WebhookNotifier
 from patchcycle.osdetect import OsDetector
 from patchcycle.providers import select_provider
 from patchcycle.providers.base import UpdateProvider
@@ -343,6 +346,16 @@ def _make_installer(config: Config, executable: str) -> Installer:
     return Installer(config=config, executable=executable)
 
 
+def _build_notifiers(config: Config) -> list[Notifier]:
+    """Compose enabled notifiers from [notifications] (ADR-0007)."""
+    notifiers: list[Notifier] = []
+    if config.notifications.email.enabled:
+        notifiers.append(SmtpNotifier(config.notifications.email))
+    if config.notifications.webhook.enabled:
+        notifiers.append(WebhookNotifier(config.notifications.webhook))
+    return notifiers
+
+
 def _entrypoint() -> str:
     script = Path(sys.argv[0]).resolve()
     if script.name.startswith("d3v-patchcycle"):
@@ -385,7 +398,7 @@ def _build_engine(
         config=config,
         hooks=HookRunner(config.hooks),
         health=HealthCheckRunner(),
-        notifiers=[],  # wired in Phase 5 from [notifications]
+        notifiers=_build_notifiers(config),
         reboot=reboot,
         hostname=platform.node(),
         is_root=lambda: os.geteuid() == 0 if hasattr(os, "geteuid") else True,

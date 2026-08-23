@@ -97,13 +97,17 @@ def _default_service_active(name: str) -> tuple[bool, str]:
 
 
 def _default_http_get(url: str, timeout: float) -> tuple[int, str]:
+    resp = None
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
-            return resp.status, ""
+        resp = urllib.request.urlopen(url, timeout=timeout)  # noqa: S310
+        return resp.status, ""
     except urllib.error.HTTPError as exc:
         return exc.code, str(exc)
     except Exception as exc:
         return 0, str(exc)
+    finally:
+        if resp is not None:
+            resp.close()
 
 
 def _default_tcp_connect(host: str, port: int, timeout: float) -> tuple[bool, str]:
