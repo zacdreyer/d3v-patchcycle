@@ -78,18 +78,24 @@ Delivered via TDD (238 tests total, 90.9% coverage):
 Exit criteria: L1/L2 green incl. failure-injection rows FR-S1–S3, S10; L3
 suite committed and CI-wired (first green CI run pending).
 
-## Phase 4 — Scheduling, reboot & resume (next)
+## Phase 4 — Scheduling, reboot & resume ✅ COMPLETE (2026-08-23)
 
-Scope: `installer.py` + unit templates (timer/service/resume + hardening),
-`reboot.py` wiring (already implemented in Phase 2; Phase 4 adds the
-installer-side verification), `resume` command hardening, `install`/
-`uninstall`/`schedule` CLI commands, existing-pending policy wiring checks.
+Delivered via TDD (274 tests, 91.1% coverage):
 
-Exit criteria: L2 simulated-reboot cycle green; install/uninstall idempotency
-tests green; `systemd-analyze` validation in CI where available; VM harness
-(L4) scripted (may run nightly, not per-PR).
+- `installer.py`: schedule → OnCalendar translation (daily/weekly/monthly/
+  manual, weekday normalisation), unit rendering (timer with Persistent=true
+  + RandomizedDelaySec; oneshot service with threat-model §5 hardening;
+  always-on resume service), idempotent install (content-diff writes),
+  config preservation (`config.toml.new` reference), `systemd-analyze
+  calendar`/`verify` validation, uninstall with `--purge` option, no-systemd
+  fail-safe, `resume_unit_enabled()` FR-S15 seam now shared by the reboot
+  controller wiring.
+- CLI: `install`, `uninstall [--purge]`, `schedule` commands wired.
+- L4 harness: `tests/vm/reboot_harness.sh` (QEMU + cloud-init Debian 13,
+  real reboot, webhook report verification, boot-id proof) + nightly
+  `vm-reboot.yml` workflow (never per-PR).
 
-## Phase 5 — Notifications
+## Phase 5 — Notifications (next)
 
 Scope: `report.py` (spec-fixed report formats), `notify/smtp.py`,
 `notify/webhook.py`, retry/backoff, `notification_status` semantics,

@@ -3,9 +3,10 @@
 Composition root: builds real collaborators and dispatches subcommands.
 Contains no business logic. Exit codes per product specification §8.
 
-Phase 2 note: ``install``/``uninstall`` arrive with the systemd installer in
-Phase 4; ``run``/``resume`` acquire a real provider — with no providers
-registered yet (APT lands in Phase 3) they fail safely with exit 5.
+Phase 2 note: ``run``/``resume`` acquire a real provider; with no matching
+registered provider they fail safely with exit 5 (support-honesty rule,
+ADR-0005). ``install``/``uninstall``/``schedule`` manage the systemd
+integration (ADR-0003).
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from patchcycle.engine import CycleEngine
 from patchcycle.errors import ConfigError, PatchCycleError, UnsupportedPlatformError
 from patchcycle.health import HealthCheckRunner
 from patchcycle.hooks import HookRunner, validate_hook_paths
+from patchcycle.installer import Installer, _real_systemd, schedule_to_oncalendar
 from patchcycle.lock import ExecutionLock
 from patchcycle.logging_setup import collect_config_secrets, configure_logging
 from patchcycle.models import OsIdentity
@@ -81,6 +83,22 @@ def build_parser() -> argparse.ArgumentParser:
     resume.add_argument(
         "--force", action="store_true", help="allow interactive use outside the resume service"
     )
+    sub.add_parser(
+        "install",
+        parents=[common],
+        help="install config, state dirs, and systemd units (idempotent)",
+    )
+    uninstall = sub.add_parser("uninstall", parents=[common], help="remove systemd integration")
+    uninstall.add_argument(
+        "--purge",
+        action="store_true",
+        help="also remove configuration, state, logs, and history",
+    )
+    sub.add_parser(
+        "schedule",
+        parents=[common],
+        help="show the effective schedule and re-render the systemd timer",
+    )
     return parser
 
 
@@ -97,6 +115,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_status_history(args)
     if args.command in ("run", "updates", "resume"):
         return _cmd_cycle(args)
+    if args.command in ("install", "uninstall", "schedule"):
+        return _cmd_install(args)
     build_parser().print_help()
     return 2
 
@@ -282,6 +302,54 @@ def _cmd_cycle(args: argparse.Namespace) -> int:
         return exc.exit_code
 
 
+def _cmd_install(args: argparse.Namespace) -> int:
+    try:
+        config = load_config(args.config)
+    except ConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 4
+    installer = _make_installer(config, executable=_entrypoint())
+    if args.command == "schedule":
+        on_calendar = schedule_to_oncalendar(config.maintenance)
+        if on_calendar is None:
+            print("schedule: manual (no timer installed; run maintenance on demand)")
+        else:
+            print(f"schedule: {on_calendar}")
+            print(f"timer: Persistent=true, RandomizedDelaySec={config.maintenance.random_delay_s}")
+            print("apply with: d3v-patchcycle install")
+        return 0
+    if args.command == "install":
+        result = installer.install()
+        if not result.ok:
+            print(f"install failed: {result.detail}", file=sys.stderr)
+            return 2
+        print(f"installed ({len(result.changed)} path(s) written)")
+        for path in result.changed:
+            print(f"  {path}")
+        print("next: d3v-patchcycle config-check && d3v-patchcycle run --dry-run")
+        return 0
+    # uninstall
+    purge = getattr(args, "purge", False)
+    result = installer.uninstall(purge=purge)
+    if not result.ok:
+        print(f"uninstall failed: {result.detail}", file=sys.stderr)
+        return 1
+    kept = "" if purge else "; configuration, state, logs and history preserved"
+    print(f"uninstalled{kept}")
+    return 0
+
+
+def _make_installer(config: Config, executable: str) -> Installer:
+    return Installer(config=config, executable=executable)
+
+
+def _entrypoint() -> str:
+    script = Path(sys.argv[0]).resolve()
+    if script.name.startswith("d3v-patchcycle"):
+        return str(script)
+    return "/usr/local/bin/d3v-patchcycle"
+
+
 # ----------------------------------------------------------------- building
 
 
@@ -371,18 +439,13 @@ def _system_reboot() -> None:  # pragma: no cover - Linux-only wiring (L4)
 
 
 def _resume_unit_enabled() -> bool:  # pragma: no cover - Linux-only wiring (L3/L4)
+    # FR-S15 fail-safe: reuse the installer's systemd seam so the check and
+    # the installer can never disagree about the unit name.
     try:
-        proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
-            ["/usr/bin/systemctl", "is-enabled", "d3v-patchcycle-resume.service"],
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        return proc.stdout.strip() == "enabled"
-    except OSError:
+        code, out = _real_systemd("is-enabled", "d3v-patchcycle-resume.service")
+    except (FileNotFoundError, OSError):
         return False
+    return code == 0 and out.strip() == "enabled"
 
 
 if __name__ == "__main__":

@@ -12,11 +12,17 @@ principle: *a clearly-reported failure beats a guessed/forced success.*
 
 ## Status (2026-08-23)
 
-- Phase 0/1 ✅, Phase 2 (core framework) ✅, **Phase 3 (APT provider) ✅** —
-  238 tests, 90.9% coverage, ruff + mypy-strict clean.
-- **Next: Phase 4 — scheduling, reboot & resume** (installer.py, systemd
-  unit templates + hardening, `install`/`uninstall`/`schedule` commands,
-  resume-unit fail-safe wiring, L4 VM harness scripted).
+- Phase 0/1 ✅, Phase 2 (core framework) ✅, Phase 3 (APT provider) ✅,
+  **Phase 4 (scheduling/reboot/resume) ✅** — 274 tests, 91.1% coverage.
+- **Next: Phase 5 — notifications** (`report.py` snapshot formats,
+  `notify/smtp.py`, `notify/webhook.py`, retry/backoff, redaction tests).
+- Installer exists: `install`/`uninstall [--purge]`/`schedule` commands,
+  systemd unit rendering (timer Persistent=true, hardened oneshot services,
+  always-on resume unit), idempotent, `systemd-analyze calendar`/`verify`
+  validation. FR-S15 seam: `_resume_unit_enabled` uses the installer's
+  systemd call so names can never drift.
+- L4 VM harness scripted: tests/vm/reboot_harness.sh + nightly workflow
+  .github/workflows/vm-reboot.yml (KVM, real reboot, webhook report check).
 - APT provider registered for debian/ubuntu(+id_like). `run`/`updates` now
   work on real Debian/Ubuntu hosts.
 

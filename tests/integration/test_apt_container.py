@@ -26,12 +26,18 @@ MATRIX = [
     "debian:13",
 ]
 
-docker_available = shutil.which("docker") is not None and subprocess.run(
-    ["docker", "info"],
-    capture_output=True,
-    timeout=15,
-    check=False,
-).returncode == 0
+_DOCKER = shutil.which("docker")
+
+docker_available = (
+    _DOCKER is not None
+    and subprocess.run(  # noqa: S603 - fixed argv
+        [_DOCKER, "info"],
+        capture_output=True,
+        timeout=15,
+        check=False,
+    ).returncode
+    == 0
+)
 
 pytestmark = [
     pytest.mark.container,
@@ -56,13 +62,21 @@ echo "== OK =="
 """
 
 
-def run_in_container(image: str, script: str, timeout: int = 900) -> subprocess.CompletedProcess[str]:
+def run_in_container(
+    image: str, script: str, timeout: int = 900
+) -> subprocess.CompletedProcess[str]:
+    assert _DOCKER is not None
     return subprocess.run(  # noqa: S603 - fixed argv, test-controlled image
         [
-            "docker", "run", "--rm",
-            "-v", f"{REPO}:/src:ro",
+            _DOCKER,
+            "run",
+            "--rm",
+            "-v",
+            f"{REPO}:/src:ro",
             image,
-            "sh", "-c", script,
+            "sh",
+            "-c",
+            script,
         ],
         capture_output=True,
         text=True,

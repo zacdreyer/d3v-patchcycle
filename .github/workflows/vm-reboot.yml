@@ -1,0 +1,33 @@
+name: L4 VM reboot harness
+
+# Nightly + manual only: real reboots, too slow and too privileged for PRs.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reboot-cycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install harness dependencies
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils cloud-image-utils curl openssh-client
+      - name: Run reboot/resume harness
+        run: bash tests/vm/reboot_harness.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: l4-harness-logs
+          path: /tmp/patchcycle-l4.*/
+          if-no-files-found: ignore

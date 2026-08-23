@@ -11,23 +11,21 @@ Date: 2026-08-23
 sudo d3v-patchcycle install
 ```
 
-What it does (idempotent):
+What it does (idempotent; validated by `systemd-analyze calendar` + `verify`):
 
-1. Verifies root, supported OS, Python ≥ 3.11, systemd present.
-2. Installs application files under `/opt/d3v-patchcycle/` (venv-free:
-   stdlib-only runtime, executed with the system `python3`) and a
-   `/usr/local/bin/d3v-patchcycle` entrypoint.
+1. Verifies systemd presence (fails safely on non-systemd systems), supported
+   OS, and Python ≥ 3.11.
+2. Installs the application entrypoint (`/usr/local/bin/d3v-patchcycle`).
 3. Creates `/etc/d3v-patchcycle/config.toml` (0600 root:root) **only if
-   absent** — an existing config is never overwritten; if the shipped default
-   changed, the new default is written to `config.toml.new` for the admin to
-   merge.
+   absent** — an existing config is never overwritten; the shipped default
+   is written to `config.toml.new` for comparison.
 4. Creates `/var/lib/d3v-patchcycle/` (0700) with `history/`, and
    `/var/log/d3v-patchcycle/` (0750 root:adm) when file logging is enabled.
-5. Renders and installs `d3v-patchcycle.timer`, `d3v-patchcycle.service`,
-   `d3v-patchcycle-resume.service` from `[maintenance]` config; validates
-   with `systemd-analyze calendar` and `systemd-analyze verify`;
-   `systemctl daemon-reload`; enables timer + resume service.
-6. Runs `config-check` and reports readiness.
+5. Renders and installs `d3v-patchcycle.timer`, `d3v-patchcycle.service`
+   (hardened oneshot, `EnvironmentFile=-/etc/d3v-patchcycle/environment`),
+   and the always-on `d3v-patchcycle-resume.service` from `[maintenance]`
+   config; enables the resume service and the timer (`enable --now`).
+6. Prints next steps (`config-check`, `run --dry-run`).
 
 `schedule = "manual"` installs the resume service only (no timer).
 
