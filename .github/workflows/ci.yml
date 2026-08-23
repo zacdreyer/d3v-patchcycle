@@ -51,8 +51,27 @@ jobs:
           # or reboot binaries outside fixture/container-marked tests.
           ! grep -rn --include='*.py' -E 'subprocess\.(run|Popen)\(\s*\[?"(apt-get|dnf|zypper|pacman|systemctl", "reboot)' tests/ src/
       - name: pytest with coverage
-        run: pytest --cov --cov-report=term
+        run: pytest --cov --cov-report=term -m "not container"
         shell: bash
+
+  container-integration:
+    name: L3 container matrix (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["ubuntu:22.04", "ubuntu:24.04", "debian:12", "debian:13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dev dependencies
+        run: pip install -e .[dev]
+      - name: Container integration tests
+        run: pytest -m container tests/integration -k "${{ matrix.image }}"
+        env:
+          PYTEST_ADDOPTS: ""
 
   build:
     name: package build

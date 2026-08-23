@@ -73,6 +73,9 @@ def wired(monkeypatch, tmp_path):
         def __init__(self, identity):
             self.os_identity = identity
 
+        def configure(self, config):
+            self.configured_with = config
+
     monkeypatch.setattr(cli, "select_provider", lambda identity: FakeProvider(identity))
     monkeypatch.setattr(cli, "_build_engine", lambda *a, **k: engine)
     return config, engine

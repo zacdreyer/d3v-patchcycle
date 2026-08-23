@@ -12,7 +12,6 @@ from patchcycle.models import OsIdentity
 from patchcycle.providers.base import UpdateProvider
 
 # Registry entries are (provider_factory, supported_ids, supported_id_like).
-# V1 note: the APT provider is implemented in Phase 3 and registered then.
 _REGISTRY: list[tuple[type[UpdateProvider], frozenset[str], frozenset[str]]] = []
 
 
@@ -24,6 +23,16 @@ def register(
 ) -> None:
     """Register a provider for exact os-release IDs and ID_LIKE fallbacks."""
     _REGISTRY.append((provider_cls, ids, id_like))
+
+
+def registry_savepoint() -> int:
+    """Test seam: snapshot the registry length for later restore."""
+    return len(_REGISTRY)
+
+
+def registry_restore(savepoint: int) -> None:
+    """Test seam: drop registrations added after the savepoint."""
+    del _REGISTRY[savepoint:]
 
 
 def select_provider(os_identity: OsIdentity) -> UpdateProvider:
@@ -39,3 +48,16 @@ def select_provider(os_identity: OsIdentity) -> UpdateProvider:
         f"Unsupported operating system: {os_identity.pretty_name}. "
         "No maintenance actions were performed."
     )
+
+
+# --- built-in provider registrations --------------------------------------
+# APT provider: registered per the support-honesty rule (ADR-0005). L1/L2
+# suites cover parsing/policy/recovery; the L3 container matrix is the
+# release gate (docs/development/implementation-plan.md Phase 3).
+from patchcycle.providers.apt import AptProvider  # noqa: E402
+
+register(
+    AptProvider,
+    ids=frozenset({"debian", "ubuntu"}),
+    id_like=frozenset({"debian"}),
+)

@@ -46,6 +46,11 @@ class PreflightError(PatchCycleError):
     error_kind = "preflight-failed"
     manual_intervention = True
 
+    def __init__(self, message: str = "", *, kind: str | None = None) -> None:
+        super().__init__(message)
+        if kind:
+            self.error_kind = kind
+
 
 class PackageManagerLockedError(PreflightError):
     """The package manager remained locked past lock_timeout."""

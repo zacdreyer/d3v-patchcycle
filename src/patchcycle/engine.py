@@ -216,7 +216,7 @@ class CycleEngine:
         if not pre.ok:
             if pre.kind == "pm-locked":
                 raise PackageManagerLockedError(pre.detail or "package manager locked")
-            raise PreflightError(pre.detail or pre.kind)
+            raise PreflightError(pre.detail or pre.kind, kind=pre.kind or None)
         return self._transition(cycle, State.REFRESHING)
 
     def _preflight_with_lock_wait(self) -> PreflightResult:

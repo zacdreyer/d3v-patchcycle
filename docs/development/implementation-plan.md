@@ -54,25 +54,36 @@ including simulated reboot in L2 tests; mypy strict clean; coverage gate ≥90%.
 Phase 4 as planned; `install`/`uninstall` commands intentionally absent until
 then.
 
-## Phase 3 — APT provider (V1 platform support)
+## Phase 3 — APT provider ✅ COMPLETE (2026-08-23)
 
-Scope: `providers/apt.py` per provider-contract.md §2 — binary resolution,
-preflight (dpkg audit, lock probe, pre-existing reboot snapshot,
-unattended-upgrades warning), refresh, list (simulation parsing + security
-pocket classification via `apt-cache policy`), apply (strategy mapping,
-conffile policy, prohibited-flag static test, timeout handling), reboot
-probe (sentinel + kernel check), verify. L3 container matrix
-(ubuntu 22.04/24.04, debian 12/13).
+Delivered via TDD (238 tests total, 90.9% coverage):
 
-Exit criteria: full cycle against a real apt in containers; failure-injection
-rows FR-S1–S3, S10 green.
+- `subproc.py`: safe subprocess wrapper — argv-only (strings rejected),
+  scrubbed env, timeout terminate→kill; `wait_for_lock_release` poller.
+- `providers/apt.py`: full contract implementation — binary resolution from
+  fixed search path (T2), preflight (dpkg --audit, lock probes, pre-existing
+  reboot snapshot, unattended-upgrades timer warning), refresh (partial-repo
+  warnings), list_updates (simulation parsing + security-pocket
+  classification via apt-cache policy), apply (safe/security/full mapping,
+  conffile policy, kernel-update + expected-kernel detection), reboot probe
+  (sentinel + kernel-not-running, conservative on probe error), verify
+  (check + audit + outstanding count). Prohibited-flag static test (ADR-0009).
+- Provider registered for debian/ubuntu (+ID_LIKE debian); engine L2
+  integration tests drive full cycles through the real provider.
+- L3 container matrix scripted (ubuntu 22.04/24.04, debian 12/13) with a CI
+  job; runs where Docker is available, skips locally.
+- Bug found by TDD: preflight failure kinds were flattened by the engine;
+  `PreflightError(kind=...)` now preserves `interrupted-transaction` etc.
 
-## Phase 4 — Scheduling, reboot & resume
+Exit criteria: L1/L2 green incl. failure-injection rows FR-S1–S3, S10; L3
+suite committed and CI-wired (first green CI run pending).
+
+## Phase 4 — Scheduling, reboot & resume (next)
 
 Scope: `installer.py` + unit templates (timer/service/resume + hardening),
-`reboot.py` (policy gates, users-logged-in via loginctl/who, boot-id capture,
-resume-unit verification fail-safe), `resume` command, window gating of
-disruptive actions, existing-pending policy.
+`reboot.py` wiring (already implemented in Phase 2; Phase 4 adds the
+installer-side verification), `resume` command hardening, `install`/
+`uninstall`/`schedule` CLI commands, existing-pending policy wiring checks.
 
 Exit criteria: L2 simulated-reboot cycle green; install/uninstall idempotency
 tests green; `systemd-analyze` validation in CI where available; VM harness

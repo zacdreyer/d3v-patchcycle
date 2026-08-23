@@ -27,6 +27,13 @@ class UpdateProvider(ABC):
     def __init__(self, os_identity: OsIdentity) -> None:
         self.os_identity = os_identity
 
+    def configure(self, config: object) -> None:  # noqa: B027 - intentional no-op default
+        """Adopt validated runtime configuration (timeouts, policies).
+
+        Default no-op; providers override to pick up their settings. Called
+        once by the composition root after selection.
+        """
+
     @abstractmethod
     def preflight(self) -> PreflightResult:
         """Verify PM health, lock availability, interrupted transactions."""

@@ -243,6 +243,7 @@ def _cmd_cycle(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         logger.error("unsupported platform: %s", identity.pretty_name)
         return 5
+    provider.configure(config)
 
     engine = _build_engine(config, identity, provider, logger)
     dry_run = getattr(args, "dry_run", False)

@@ -12,14 +12,30 @@ principle: *a clearly-reported failure beats a guessed/forced success.*
 
 ## Status (2026-08-23)
 
-- Phase 0 (research) ✅, Phase 1 (specification) ✅, **Phase 2 (core
-  framework) ✅** — 190 tests, 90.4% coverage, ruff + mypy-strict clean,
-  GitHub Actions CI committed.
-- **Next: Phase 3 — APT provider** (`providers/apt.py` per
-  docs/specifications/provider-contract.md §2; register it in
-  `providers/__init__.py`; L3 container matrix ubuntu 22.04/24.04,
-  debian 12/13). Until registered, `run`/`updates` fail safely with exit 5.
-- Repo: `main` branch; docs + `src/patchcycle` + `tests` + CI.
+- Phase 0/1 ✅, Phase 2 (core framework) ✅, **Phase 3 (APT provider) ✅** —
+  238 tests, 90.9% coverage, ruff + mypy-strict clean.
+- **Next: Phase 4 — scheduling, reboot & resume** (installer.py, systemd
+  unit templates + hardening, `install`/`uninstall`/`schedule` commands,
+  resume-unit fail-safe wiring, L4 VM harness scripted).
+- APT provider registered for debian/ubuntu(+id_like). `run`/`updates` now
+  work on real Debian/Ubuntu hosts.
+
+## Phase 3 implementation notes
+
+- `subproc.run_argv`: argv-only (string → TypeError), scrubbed env
+  (PATH/LANG/LC_ALL only + explicit extra_env), timeout terminate→kill.
+- `AptProvider` seams: `runner`, `search_paths`, `state_root` (prefix for
+  /var/run, /var/lib/dpkg), `timer_active`, plus `configure(config)` which
+  adopts `[updates]`/`[package_manager]` settings (base-class no-op default).
+- Provider registry has test savepoints: `registry_savepoint/restore`.
+- Simulation parsing: `Inst pkg [from] (to ...)` + kept-back block;
+  security pocket via `apt-cache policy` origin lines matching `-security`.
+- Kernel expectation: newest `linux-image-*` dpkg-query entry, meta packages
+  excluded; `expected_kernel` compared post-reboot (FR-S13).
+- L3: tests/integration/test_apt_container.py (mark `container`, skips
+  without docker); CI job `container-integration` matrix.
+- Engine fix: PreflightError(kind=...) preserves pm-locked/interrupted-
+  transaction kinds into state error.kind.
 
 ## Phase 2 implementation notes
 

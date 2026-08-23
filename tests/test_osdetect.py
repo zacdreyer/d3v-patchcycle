@@ -165,10 +165,19 @@ class FakeProvider(UpdateProvider):
 
 
 class TestProviderRegistry:
+    @pytest.fixture(autouse=True)
+    def _registry_scope(self):
+        """Registry tests add fakes; restore built-in registrations after."""
+        from patchcycle.providers import registry_restore, registry_savepoint
+
+        savepoint = registry_savepoint()
+        yield
+        registry_restore(savepoint)
+
     def test_exact_id_match(self):
-        register(FakeProvider, ids=frozenset({"ubuntu", "debian"}))
+        register(FakeProvider, ids=frozenset({"tux-os"}))
         ident = OsDetector(
-            fields=load_fixture("ubuntu-24.04"),
+            fields={"ID": "tux-os", "PRETTY_NAME": "TuxOS 1"},
             system="Linux",
             kernel="k",
             arch="x86_64",
@@ -176,7 +185,7 @@ class TestProviderRegistry:
         ).detect()
         provider = select_provider(ident)
         assert isinstance(provider, FakeProvider)
-        assert provider.os_identity.os_id == "ubuntu"
+        assert provider.os_identity.os_id == "tux-os"
 
     def test_id_like_fallback(self):
         register(FakeProvider, ids=frozenset({"tux"}), id_like=frozenset({"rhel"}))
