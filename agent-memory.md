@@ -12,11 +12,13 @@ principle: *a clearly-reported failure beats a guessed/forced success.*
 
 ## Status (2026-08-23)
 
-- Phase 0/1/2/3/4/5 ✅, **Phase 6 (health checks & hooks) ✅** — dry-run
-  hook classification, full failure-policy matrix, engine-level hook-veto
-  tests.
-- **Next: Phase 7 — hardening** (L4 VM tests in nightly CI, coverage gaps,
-  fuzz-ish parser robustness, security sweep, final doc sync, V1.0 tag).
+- Phase 0–7 ✅. **V1 feature-complete at 1.0.0rc1** — 380+ tests, 91.7%
+  coverage, ruff + mypy-strict clean.
+- **V1.0 release gate: one green nightly L4 VM reboot run** (tests/vm/
+  reboot_harness.sh via .github/workflows/vm-reboot.yml). After that: tag
+  v1.0.0, then Phase 8 (DNF provider for RHEL 9/Rocky/Alma/Fedora).
+- Security sweep done (T1–T14 tests); `_PACKAGE_NAME_RE` guards package names
+  before argv; fuzzed parsers never crash; 1000-package perf bounds pass.
 - Known issue: full pytest suite intermittently hangs on this Windows dev
   host (socket teardown under load). Per-file runs green; CI (Linux)
   unaffected. If CI reproduces, investigate ThreadingTCPServer teardown.

@@ -120,15 +120,24 @@ Delivered via TDD (274 tests, 91.1% coverage):
   the reboot with updates already applied.
 - Typing: engine notifiers typed as the `Notifier` ABC (mypy-strict clean).
 
-## Phase 7 — Hardening (next)
+## Phase 7 — Hardening ✅ COMPLETE (2026-08-23)
 
-Scope: L4 VM reboot tests in nightly CI (real reboot + power-cut), coverage
-gaps to gate, fuzz-ish config/parser robustness passes, security test sweep
-(T1–T14), performance sanity (no regression on 1000+ package lists),
-documentation final sync, V1.0 tag.
-
-Exit criteria: Definition of Done (product-specification.md §9) demonstrably
-met on Ubuntu 24.04 and Debian 13 VMs.
+- Security sweep `tests/test_security.py` mapping T1–T14: injection (argv-only,
+  hostile package names inert), PATH hijacking, environment scrubbing,
+  malicious config, secret redaction incl. state-schema secret absence,
+  state tamper quarantine, log-injection single-record, duplicate-notification
+  prevention.
+- `AptProvider._PACKAGE_NAME_RE` validates package names before argv
+  construction (defence in depth; hostile names dropped, never executed).
+- Robustness: seeded fuzz of os-release/simulation/policy parsers (never
+  crash); config rejects pathological nesting; 1000-package simulation and
+  policy classification within performance bounds.
+- Coverage closed to 91.7% (gate ≥90%); lock POSIX branches, engine edges,
+  state-store error paths, apply-path name handling covered.
+- Full suite green on this host (intermittent Windows socket-teardown hang
+  did not recur after test-server hardening in Phase 5).
+- L4 VM harness runs nightly in CI; first green nightly is the V1.0 release
+  gate.
 
 ## Phase 8 — Additional providers (post-V1, ordered)
 

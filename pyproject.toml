@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "d3v-patchcycle"
-version = "0.2.0.dev0"
+version = "1.0.0rc1"
 description = "Stateful, reboot-safe server maintenance utility"
 readme = "README.md"
 requires-python = ">=3.11"
