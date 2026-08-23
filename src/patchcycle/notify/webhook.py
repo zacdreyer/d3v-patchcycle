@@ -46,7 +46,9 @@ class WebhookNotifier(Notifier):
         data["host"] = report.hostname
         data["text"] = body
         payload = json.dumps(data, default=str).encode()
-        request = urllib.request.Request(  # noqa: S310 - URL validated by config schema
+        # S310: URL scheme is validated by the config schema (https required
+        # off-loopback); secrets travel in headers, never in the URL.
+        request = urllib.request.Request(  # noqa: S310
             self.config.url,
             data=payload,
             method="POST",
@@ -55,7 +57,9 @@ class WebhookNotifier(Notifier):
         for name, value in resolve_headers(self.config.headers):
             request.add_header(name, value)
         try:
-            with urllib.request.urlopen(request, timeout=self.config.timeout_s) as resp:
+            with urllib.request.urlopen(  # noqa: S310 - validated Request object
+                request, timeout=self.config.timeout_s
+            ) as resp:
                 if 200 <= resp.status < 300:
                     return "sent"
                 return f"failed:http-{resp.status}"

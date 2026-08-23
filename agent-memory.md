@@ -12,11 +12,11 @@ principle: *a clearly-reported failure beats a guessed/forced success.*
 
 ## Status (2026-08-23)
 
-- Phase 0/1/2/3/4 ✅, **Phase 5 (notifications) ✅** — SMTP + webhook
-  notifiers, report.py renderer, engine wiring.
-- **Next: Phase 6 — health checks & hooks hardening** (mostly built in
-  Phase 2: `health.py`, `hooks.py`; Phase 6 adds remaining edge tests and
-  dry-run hook classification).
+- Phase 0/1/2/3/4/5 ✅, **Phase 6 (health checks & hooks) ✅** — dry-run
+  hook classification, full failure-policy matrix, engine-level hook-veto
+  tests.
+- **Next: Phase 7 — hardening** (L4 VM tests in nightly CI, coverage gaps,
+  fuzz-ish parser robustness, security sweep, final doc sync, V1.0 tag).
 - Known issue: full pytest suite intermittently hangs on this Windows dev
   host (socket teardown under load). Per-file runs green; CI (Linux)
   unaffected. If CI reproduces, investigate ThreadingTCPServer teardown.

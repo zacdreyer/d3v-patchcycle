@@ -39,6 +39,7 @@ from patchcycle.models import (
     ReportData,
     UpdateInfo,
 )
+from patchcycle.notify.base import Notifier
 from patchcycle.providers.base import UpdateProvider
 from patchcycle.reboot import RebootAction, RebootController
 from patchcycle.state_store import CycleState, StateStore
@@ -55,12 +56,6 @@ class HealthRunnerLike(Protocol):
     def run(self, checks: Any) -> list[HealthResult]: ...
 
 
-class NotifierLike(Protocol):
-    name: str
-
-    def deliver(self, report: ReportData, body: str) -> str: ...
-
-
 @dataclass
 class CycleEngine:
     store: StateStore
@@ -68,7 +63,7 @@ class CycleEngine:
     config: Config
     hooks: HookRunnerLike
     health: HealthRunnerLike
-    notifiers: list[NotifierLike]
+    notifiers: list[Notifier]
     reboot: RebootController
     hostname: str
     is_root: Callable[[], bool]
@@ -131,6 +126,8 @@ class CycleEngine:
 
     def dry_run(self) -> dict[str, Any]:
         """Read-only plan (FR-18): no state writes, no apply, no reboot."""
+        from patchcycle.hooks import classify_hooks
+
         pre = self.provider.preflight()
         refresh = self.provider.refresh()
         updates = self.provider.list_updates(self.config.updates.strategy)
@@ -147,6 +144,15 @@ class CycleEngine:
             "reboot_reasons": list(reboot.reasons),
             "strategy": self.config.updates.strategy,
             "reboot_policy": self.config.reboot.policy,
+            "health_checks": [
+                {"kind": c.kind, "name": c.name, "critical": c.critical}
+                for c in self.config.health_checks
+            ],
+            "hooks": classify_hooks(),
+            "notifications": {
+                "email": self.config.notifications.email.enabled,
+                "webhook": self.config.notifications.webhook.enabled,
+            },
         }
 
     # -------------------------------------------------------------- engine
@@ -483,7 +489,7 @@ class CycleEngine:
         if self.hooks.should_abort(results, point):
             raise PreflightError(f"hook at {point} failed with failure_policy=abort")
 
-    def _deliver_with_retries(self, notifier: NotifierLike, report: ReportData, body: str) -> str:
+    def _deliver_with_retries(self, notifier: Notifier, report: ReportData, body: str) -> str:
         for attempt, delay in enumerate((5.0, 30.0, 120.0), start=1):
             result = notifier.deliver(report, body)
             if result == "sent":

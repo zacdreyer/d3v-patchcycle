@@ -108,15 +108,19 @@ Delivered via TDD (274 tests, 91.1% coverage):
   unaffected. Watch item: if CI shows the same, investigate ThreadingTCPServer
   teardown further.
 
-## Phase 6 — Health checks & hooks (next)
+## Phase 6 — Health checks & hooks ✅ COMPLETE (2026-08-23)
 
-Scope: `health.py` (service/http/tcp/command + failed-units implicit check,
-criticality rollup), `hooks.py` (argv validation, timeouts, failure
-policies), dry-run hook classification.
+- `HOOK_CLASSIFICATION` / `classify_hooks()`: every hook point is classified
+  "skipped" in dry-run (FR-18); `dry_run()` plan now reports hooks, health
+  checks, and enabled notifiers.
+- Failure-policy matrix tested: before_upgrade/before_reboot default to abort
+  (veto the upgrade/reboot), after_* default to continue, `failure_policy =
+  "continue"` overrides before_*; engine-level tests prove a before_upgrade
+  hook failure blocks before any package op and a before_reboot failure vetoes
+  the reboot with updates already applied.
+- Typing: engine notifiers typed as the `Notifier` ABC (mypy-strict clean).
 
-Exit criteria: FR-S12 green; T8/T1 hook security tests green.
-
-## Phase 7 — Hardening
+## Phase 7 — Hardening (next)
 
 Scope: L4 VM reboot tests in nightly CI (real reboot + power-cut), coverage
 gaps to gate, fuzz-ish config/parser robustness passes, security test sweep

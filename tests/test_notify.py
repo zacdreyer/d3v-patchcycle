@@ -48,7 +48,7 @@ class FakeSMTPServer:
         self.server = None
         self.port = 0
 
-    def __enter__(self):
+    def __enter__(self):  # noqa: C901 - SMTP protocol fake is inherently linear
         import socketserver
 
         parent = self
@@ -197,7 +197,7 @@ class TestSmtpNotifier:
         cfg = self.config(
             smtp_port=1,
             smtp_username="patchcycle",
-            smtp_password_env="PATCHCYCLE_SMTP_PASSWORD",
+            smtp_password_env="PATCHCYCLE_SMTP_PASSWORD",  # noqa: S106 - env var NAME
         )
         notifier = SmtpNotifier(cfg)
         result = notifier.deliver(REPORT, BODY)

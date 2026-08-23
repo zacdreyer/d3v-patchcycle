@@ -22,6 +22,21 @@ _HOOK_ENV = {
     "LC_ALL": "C",
 }
 
+#: FR-18 dry-run classification: every hook point is treated as potentially
+#: disruptive and is never executed in a dry run; the plan reports this.
+HOOK_CLASSIFICATION: dict[str, str] = {
+    "before_upgrade": "skipped",
+    "before_reboot": "skipped",
+    "after_reboot": "skipped",
+    "after_upgrade": "skipped",
+    "on_failure": "skipped",
+}
+
+
+def classify_hooks() -> dict[str, str]:
+    """Dry-run classification for every hook point (FR-18)."""
+    return dict(HOOK_CLASSIFICATION)
+
 
 class HookRunner:
     def __init__(
