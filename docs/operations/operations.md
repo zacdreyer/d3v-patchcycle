@@ -1,7 +1,13 @@
 # D3V PatchCycle — Operations Guide
 
-Status: Baseline for V1 (matches specification; updated as phases land)
+Status: Baseline for V1 (matches specification; current at v1.0.0-rc1)
 Date: 2026-08-23
+
+> **Pre-release notice:** D3V PatchCycle is under active development
+> (v1.0.0-rc1). The procedures below match the specification and are
+> integration-tested, but the software has not yet cut a stable release —
+> the V1.0 gate is a green nightly L4 VM reboot run. Test on non-production
+> systems first.
 
 ---
 

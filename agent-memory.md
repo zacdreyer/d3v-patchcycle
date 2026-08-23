@@ -10,6 +10,9 @@ native package manager → safe reboot → auto-resume → verify → health che
 notify admin. Local-only, no daemon, no listeners, no DB. Governing
 principle: *a clearly-reported failure beats a guessed/forced success.*
 
+**Pre-release: v1.0.0-rc1, under active development. Do not deploy to
+production until the L4 nightly reboot run is green and v1.0.0 is tagged.**
+
 ## Status (2026-08-23)
 
 - Phase 0–7 ✅. **V1 feature-complete at 1.0.0rc1** — 380+ tests, 91.7%

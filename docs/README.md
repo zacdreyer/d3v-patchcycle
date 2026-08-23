@@ -43,6 +43,9 @@ docs/
 
 ## Current status
 
-Phase 0 (research) and Phase 1 (specification) complete. See
+Phases 0–7 complete; **v1.0.0-rc1** (feature-complete, pre-release). The V1.0
+release gate is one green nightly L4 VM reboot run
+(`tests/vm/reboot_harness.sh` via `.github/workflows/vm-reboot.yml`).
+Phase 8 (additional providers) is post-V1. See
 `development/implementation-plan.md` for the phase breakdown and
 `../agent-memory.md` for a token-efficient cold-start summary.
