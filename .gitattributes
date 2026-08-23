@@ -1,0 +1,4 @@
+# Shell scripts and CI assets must keep LF for Linux targets.
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
