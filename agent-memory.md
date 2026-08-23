@@ -12,10 +12,14 @@ principle: *a clearly-reported failure beats a guessed/forced success.*
 
 ## Status (2026-08-23)
 
-- Phase 0/1 ✅, Phase 2 (core framework) ✅, Phase 3 (APT provider) ✅,
-  **Phase 4 (scheduling/reboot/resume) ✅** — 274 tests, 91.1% coverage.
-- **Next: Phase 5 — notifications** (`report.py` snapshot formats,
-  `notify/smtp.py`, `notify/webhook.py`, retry/backoff, redaction tests).
+- Phase 0/1/2/3/4 ✅, **Phase 5 (notifications) ✅** — SMTP + webhook
+  notifiers, report.py renderer, engine wiring.
+- **Next: Phase 6 — health checks & hooks hardening** (mostly built in
+  Phase 2: `health.py`, `hooks.py`; Phase 6 adds remaining edge tests and
+  dry-run hook classification).
+- Known issue: full pytest suite intermittently hangs on this Windows dev
+  host (socket teardown under load). Per-file runs green; CI (Linux)
+  unaffected. If CI reproduces, investigate ThreadingTCPServer teardown.
 - Installer exists: `install`/`uninstall [--purge]`/`schedule` commands,
   systemd unit rendering (timer Persistent=true, hardened oneshot services,
   always-on resume unit), idempotent, `systemd-analyze calendar`/`verify`

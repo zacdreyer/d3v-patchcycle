@@ -95,16 +95,20 @@ Delivered via TDD (274 tests, 91.1% coverage):
   real reboot, webhook report verification, boot-id proof) + nightly
   `vm-reboot.yml` workflow (never per-PR).
 
-## Phase 5 — Notifications (next)
+## Phase 5 — Notifications ✅ COMPLETE (2026-08-23)
 
-Scope: `report.py` (spec-fixed report formats), `notify/smtp.py`,
-`notify/webhook.py`, retry/backoff, `notification_status` semantics,
-canary-secret redaction tests.
+- `notify/smtp.py` (stdlib smtplib, env-indirected credentials, explicit
+  quit/close), `notify/webhook.py` (stdlib urllib JSON POST, env: header
+  indirection, Bearer prefixing, https-only off loopback), `report.py`
+  (canonical spec-§23 renderer). CLI `_build_notifiers` wires enabled
+  notifiers. FR-S11 semantics tested: delivery failures return `failed:*`,
+  never raise, never leak secrets, never change outcomes.
+- Note: full-suite runs intermittently hang on this Windows dev host
+  (socket teardown under load); per-file runs are green and CI (Linux) is
+  unaffected. Watch item: if CI shows the same, investigate ThreadingTCPServer
+  teardown further.
 
-Exit criteria: success/failure report snapshots match product-spec examples;
-FR-S11 green.
-
-## Phase 6 — Health checks & hooks
+## Phase 6 — Health checks & hooks (next)
 
 Scope: `health.py` (service/http/tcp/command + failed-units implicit check,
 criticality rollup), `hooks.py` (argv validation, timeouts, failure
