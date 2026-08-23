@@ -18,9 +18,11 @@ Implements: FR-04, FR-08–FR-11 (product-specification.md)
 3. **No silent skipping:** resumption continues at the correct state;
    completed actions are not repeated (guarded by recorded facts, e.g.
    `updates_applied: true`).
-4. Every non-terminal state may transition to `FAILED`. `FAILED` and
-   `COMPLETED` are terminal for a cycle; a new `run` starts a new cycle with a
-   new `run_id`.
+4. Every non-terminal state may transition to `FAILED`, **except**
+   `NOTIFYING`: delivery failure is recorded in `notification_status` and
+   the cycle completes (§4.11), because delivery failure must not rewrite
+   maintenance truth. `FAILED` and `COMPLETED` are terminal for a cycle; a
+   new `run` starts a new cycle with a new `run_id`.
 
 ## 2. States
 
@@ -47,9 +49,9 @@ Implements: FR-04, FR-08–FR-11 (product-specification.md)
 |---|---|---|
 | `IDLE` | `PRECHECK` (new cycle started) | — |
 | `PRECHECK` | `REFRESHING` | `FAILED` (blocked: exit 2/4/5, `manual_intervention` per cause) |
-| `REFRESHING` | `DISCOVERING_UPDATES` | `FAILED` (PmFailed / PmLocked after timeout) |
-| `DISCOVERING_UPDATES` | `UPGRADING` if updates exist; else `CHECKING_REBOOT` (still must evaluate pre-existing pending reboot) | `FAILED` |
-| `UPGRADING` | `CHECKING_REBOOT` | `FAILED` (package-manager failure; state records partial facts) |
+| `REFRESHING` | `DISCOVERING_UPDATES`; recovery arc → `PRECHECK` (FR-S1) | `FAILED` (PmFailed / PmLocked after timeout) |
+| `DISCOVERING_UPDATES` | `UPGRADING` if updates exist; else `CHECKING_REBOOT` (still must evaluate pre-existing pending reboot); recovery arc → `PRECHECK` (FR-S1) | `FAILED` |
+| `UPGRADING` | `CHECKING_REBOOT`; recovery arc → `PRECHECK` (FR-S2, gated by provider preflight in PRECHECK) | `FAILED` (package-manager failure; state records partial facts) |
 | `CHECKING_REBOOT` | `REBOOT_PENDING` if reboot required; else `VERIFYING` | `FAILED` (probe error — treated conservatively) |
 | `REBOOT_PENDING` | `REBOOTING` if policy allows now; `VERIFYING` if `notify_only`/`never` (result flagged `MANUAL_REBOOT_REQUIRED`, exit 6); `FAILED` if outside allowed window and policy requires window (blocked) | `FAILED` |
 | `REBOOTING` | *(process terminates with the machine)* → after boot, resume enters `POST_REBOOT` | `FAILED` if reboot command failed and retry budget exhausted |

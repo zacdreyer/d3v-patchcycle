@@ -12,10 +12,33 @@ principle: *a clearly-reported failure beats a guessed/forced success.*
 
 ## Status (2026-08-23)
 
-- Phase 0 (research) ✅, Phase 1 (specification) ✅. **Next: Phase 2 — core
-  framework (scaffolding, config, osdetect, state store, state machine,
-  lock, logging, window, CLI).**
-- Repo: single `main` branch; docs-only so far; no code, no CI yet.
+- Phase 0 (research) ✅, Phase 1 (specification) ✅, **Phase 2 (core
+  framework) ✅** — 190 tests, 90.4% coverage, ruff + mypy-strict clean,
+  GitHub Actions CI committed.
+- **Next: Phase 3 — APT provider** (`providers/apt.py` per
+  docs/specifications/provider-contract.md §2; register it in
+  `providers/__init__.py`; L3 container matrix ubuntu 22.04/24.04,
+  debian 12/13). Until registered, `run`/`updates` fail safely with exit 5.
+- Repo: `main` branch; docs + `src/patchcycle` + `tests` + CI.
+
+## Phase 2 implementation notes
+
+- Layout: src layout, console script `d3v-patchcycle = patchcycle.cli:main`.
+- Engine: `_drive()` loop over `_HANDLERS`; transitions persisted BEFORE
+  actions; COMPLETED finalized by driver (no handler); NOTIFYING → COMPLETED
+  only (spec §1 rule 4 amended: delivery failure never fails a cycle).
+- Recovery arcs REFRESHING/DISCOVERING/UPGRADING → PRECHECK exist in the
+  transition table (FR-S1/S2; PRECHECK re-runs provider preflight which
+  catches interrupted dpkg).
+- boot_id is recorded at PRECHECK (unexpected-reboot detection, FR-S6) and
+  re-recorded in REBOOTING (ADR-0008).
+- `run(scheduled=…, force=…)` gates on maintenance.enabled.
+- CLI: `--config` accepted before/after subcommand; `run --dry-run`,
+  `run --force`, `run --scheduled` (timer uses this in Phase 4 units).
+- Lock: flock POSIX / msvcrt Windows (dev only); holder pid recorded.
+- Windows dev quirks handled: msvcrt byte-lock release is async (tests use
+  bounded retry); config `_abs_path` accepts drive letters for dev fixtures.
+- mypy 2.3.1 needed force-reinstall of librt on this machine.
 
 ## Locked decisions (ADRs in docs/decisions/)
 
@@ -56,10 +79,12 @@ principle: *a clearly-reported failure beats a guessed/forced success.*
 
 ## Commands
 
-- Dev setup (Phase 2): `python -m venv .venv && pip install -e .[dev]`
-- Tests: `pytest`; lint: `ruff check && ruff format --check`; types:
-  `mypy --strict src/patchcycle`
-- CI must never run real apt/dnf on the runner (guard test).
+- Dev env: `python -m venv .venv; .venv\Scripts\pip install -e .[dev]`
+  (Windows) / `pip install -e .[dev]` (Linux).
+- Tests: `pytest` (fast) / `pytest --cov` (gate ≥90%).
+- Lint/format: `ruff check src tests`; `ruff format --check src tests`.
+- Types: `mypy --strict -p patchcycle`.
+- CI must never run real apt/dnf on the runner (guard step in ci.yml).
 
 ## Known risks / watch items
 

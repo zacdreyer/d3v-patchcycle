@@ -1,0 +1,7 @@
+PRETTY_NAME="Quoted \"Name\" With $pecial and `chars`"
+NAME='Single Quoted OS'
+ID=weird-os
+ID_LIKE="debian   rhel"
+VERSION_ID=1
+VERSION_ID=2
+BOGUS LINE WITHOUT EQUALS

@@ -21,29 +21,38 @@ Output: full SDD set under `docs/` (requirements, architecture, state
 machine, provider contract, configuration, failure/recovery, threat model,
 test strategy, operations) + 9 ADRs + this plan. No production code written.
 
-## Phase 2 — Core framework (next)
+## Phase 2 — Core framework ✅ COMPLETE (2026-08-23)
 
-Scope (TDD, L1/L2 tests):
+Delivered via TDD (190 tests, 90.4% coverage, ruff/mypy-strict clean):
 
-1. Project scaffolding: `pyproject.toml` (src layout, console script
-   `d3v-patchcycle`), ruff + mypy + pytest config, GitHub Actions CI skeleton
-   (lint/type/unit matrix 3.11–3.14, pip-audit, build check).
-2. `models.py`, `config.py` (strict TOML schema, duration/time grammar,
-   secret indirection) — configuration.md is the spec.
-3. `osdetect.py` (os-release via `platform.freedesktop_os_release` with
-   fixture-driven tests) + provider registry with support-honesty failure.
-4. `state_store.py` (atomic writes, schema gate, quarantine) +
-   `states.py` (transition table + invariants) + `engine.py` skeleton that
-   can walk states with fake providers.
-5. `lock.py` (flock execution lock), `logging_setup.py` (structured records,
-   redaction filter), `window.py` (maintenance-window math incl. overnight).
-6. `cli.py` with all commands wired; `detect`, `config-check`, `version`,
-   `status`, `history` fully functional; `run`/`resume` drive the engine with
-   a `NullProvider` (always "unsupported") until Phase 3.
+1. ✅ Scaffolding: `pyproject.toml` (src layout, console script, zero runtime
+   deps), ruff + mypy-strict + pytest config, GitHub Actions CI (lint/types/
+   format, unit matrix 3.11–3.14 × ubuntu/windows, package build, pip-audit,
+   destructive-command guard).
+2. ✅ `models.py`, `config.py` — strict TOML schema with typo hints,
+   duration/time grammar, secret indirection, warnings for risky options.
+3. ✅ `osdetect.py` (os-release spec parser incl. quoting/escapes/duplicates;
+   /etc precedence, never combined) + provider registry with support-honesty
+   failure. **Note:** provider registry is empty until Phase 3 registers APT —
+   `run`/`resume`/`updates` fail safely with exit 5.
+4. ✅ `state_store.py` (atomic temp+fsync+replace+dir-fsync; quarantine on
+   corruption; schema-version refusal) + `states.py` (transition table +
+   recovery arcs) + `engine.py` — full cycle driver incl. simulated-reboot
+   L2 path, crash recovery (FR-S1/S2/S6/S7), policies, window gating,
+   maintenance.enabled gating.
+5. ✅ `lock.py` (flock/msvcrt, stale-proof), `logging_setup.py` (JSONL +
+   redaction filter), `window.py` (overnight windows), `reboot.py`
+   (policy/gates/boot-id/expected-kernel), `hooks.py`, `health.py`,
+   `notify/base.py`.
+6. ✅ `cli.py` — all V1 commands except install/uninstall (Phase 4);
+   `run --dry-run`/`updates`/`detect`/`config-check`/`status`/`history`/
+   `version`/`resume`; `--config` before or after subcommand.
 
-Exit criteria: engine can complete and recover a full simulated cycle
-(incl. simulated reboot via boot-id fixture) in L2 tests; mypy strict clean;
-coverage gate green.
+Exit criteria met: engine completes and recovers a full simulated cycle
+including simulated reboot in L2 tests; mypy strict clean; coverage gate ≥90%.
+**Deviation note:** Phase-2 scope items "systemd installer" moved wholly to
+Phase 4 as planned; `install`/`uninstall` commands intentionally absent until
+then.
 
 ## Phase 3 — APT provider (V1 platform support)
 
