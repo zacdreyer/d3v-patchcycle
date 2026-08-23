@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from patchcycle.models import HookResult
-from patchcycle.states import State
 from tests.test_engine import ScriptedProvider, make_engine
+
+from patchcycle.models import HookResult
 
 
 class RealPolicyHooks:

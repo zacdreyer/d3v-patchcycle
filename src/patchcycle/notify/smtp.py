@@ -28,8 +28,7 @@ class SmtpNotifier(Notifier):
         msg["From"] = cfg.from_addr or f"patchcycle@{report.hostname}"
         msg["To"] = ", ".join(cfg.to)
         msg["Subject"] = (
-            f"D3V PatchCycle {report.outcome.value.upper().replace('_', ' ')}: "
-            f"{report.hostname}"
+            f"D3V PatchCycle {report.outcome.value.upper().replace('_', ' ')}: {report.hostname}"
         )
         msg.set_content(body)
         smtp: smtplib.SMTP | None = None

@@ -24,9 +24,11 @@ class TestClassification:
         assert classification["on_failure"] == "skipped"
 
     def test_all_hook_points_covered(self):
-        cfg = HooksConfig()
         for point in (
-            "before_upgrade", "before_reboot", "after_reboot", "after_upgrade",
+            "before_upgrade",
+            "before_reboot",
+            "after_reboot",
+            "after_upgrade",
             "on_failure",
         ):
             assert point in HOOK_CLASSIFICATION
@@ -36,8 +38,9 @@ class TestDryRunSkipsHooks:
     """FR-18: dry run must not execute destructive hooks."""
 
     def test_dry_run_executes_no_hooks(self, tmp_path):
-        from patchcycle.models import RebootStatus
         from tests.test_engine import ScriptedProvider, make_engine
+
+        from patchcycle.models import RebootStatus
 
         provider = ScriptedProvider(updates=[], reboot=RebootStatus(False))
         engine, store, env = make_engine(

@@ -31,8 +31,7 @@ def render_report(report: ReportData) -> str:
         f"Kernel after: {report.kernel_after}",
         "",
         f"Outstanding updates: {report.outstanding_updates}",
-        f"Health checks: "
-        f"{'Passed' if all(r.ok for r in report.health_results) else 'FAILED'}",
+        f"Health checks: {'Passed' if all(r.ok for r in report.health_results) else 'FAILED'}",
         f"Failed services: {report.failed_services}",
     ]
     if report.error:

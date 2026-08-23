@@ -51,6 +51,10 @@ _INST_RE = re.compile(r"^Inst\s+(\S+)\s+\[([^\]]+)\]\s+\((\S+)")
 _KEPT_RE = re.compile(r"^\s{2,}(\S+)\s+\((\S+)\s+=>\s+(\S+)\)")
 _SECURITY_POCKET_RE = re.compile(r"-security[ /]")
 
+#: Debian package-name grammar (deb-control): lowercase alnum start, then
+#: alnum/+/-/./: — anything else never reaches an argv (defence in depth, T1).
+_PACKAGE_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9+.\-:_]*$")
+
 Runner = Callable[..., CommandResult]
 
 
@@ -345,7 +349,11 @@ class AptProvider(UpdateProvider):
             f"Dpkg::Options::={conf_new_or_old}",
         ]
         if strategy == "security":
-            targets = [u.name for u in updates if u.security and not u.held]
+            targets = [
+                u.name
+                for u in updates
+                if u.security and not u.held and _PACKAGE_NAME_RE.match(u.name)
+            ]
             if not targets:
                 return ApplyResult(ok=True, packages_updated=0)
             argv = [*base_opts, "install", "--only-upgrade", *targets]

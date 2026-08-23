@@ -82,11 +82,13 @@ class FakeSMTPServer:
                                 break
                             data_lines.append(dline)
                         self.wfile.write(b"250 queued\r\n")
-                        parent.messages.append({
-                            "mail_from": mail_from,
-                            "rcpt": rcpt,
-                            "data": "\n".join(data_lines),
-                        })
+                        parent.messages.append(
+                            {
+                                "mail_from": mail_from,
+                                "rcpt": rcpt,
+                                "data": "\n".join(data_lines),
+                            }
+                        )
                     elif upper == "QUIT":
                         self.wfile.write(b"221 bye\r\n")
                         break
@@ -124,12 +126,14 @@ class FakeWebhook:
             def do_POST(self):
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length).decode()
-                parent.requests.append({
-                    "path": self.path,
-                    "authorization": self.headers.get("Authorization"),
-                    "content_type": self.headers.get("Content-Type"),
-                    "body": body,
-                })
+                parent.requests.append(
+                    {
+                        "path": self.path,
+                        "authorization": self.headers.get("Authorization"),
+                        "content_type": self.headers.get("Content-Type"),
+                        "body": body,
+                    }
+                )
                 self.send_response(parent.status)
                 self.end_headers()
 
@@ -177,7 +181,9 @@ class TestSmtpNotifier:
 
     def test_subject_success_format(self):
         ok_report = ReportData(
-            run_id="r", hostname="db01", os_pretty_name="Debian 13",
+            run_id="r",
+            hostname="db01",
+            os_pretty_name="Debian 13",
             outcome=Outcome.SUCCESS,
         )
         with FakeSMTPServer() as smtp:
