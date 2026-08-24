@@ -108,7 +108,10 @@ def fake_bin(tmp_path):
     bindir = tmp_path / "sbin"
     bindir.mkdir()
     for name in ("apt-get", "dpkg", "dpkg-query", "apt-cache"):
-        (bindir / name).write_text("#!fixture\n")
+        path = bindir / name
+        path.write_text("#!fixture\n")
+        if os.name == "posix":
+            path.chmod(0o755)  # X_OK check fails on Linux without this
     return bindir
 
 
@@ -122,7 +125,10 @@ def make_provider(runner=None, fake_bin=None, tmp_path_override=None, **kwargs) 
 class TestBinaryResolution:
     def test_resolves_from_fixed_search_path(self, tmp_path):
         for name in ("apt-get", "dpkg", "dpkg-query", "apt-cache"):
-            (tmp_path / name).write_text("#!x\n")
+            path = tmp_path / name
+            path.write_text("#!x\n")
+            if os.name == "posix":
+                path.chmod(0o755)
         provider = make_provider(search_paths=(str(tmp_path),))
         assert provider.binaries["apt-get"] == str(tmp_path / "apt-get")
 
@@ -141,7 +147,10 @@ class TestBinaryResolution:
         good.mkdir()
         (evil / "apt-get").write_text("#!evil\n")
         for name in ("apt-get", "dpkg", "dpkg-query", "apt-cache"):
-            (good / name).write_text("#!x\n")
+            path = good / name
+            path.write_text("#!x\n")
+            if os.name == "posix":
+                path.chmod(0o755)
         monkeypatch.setenv("PATH", str(evil))
         provider = make_provider(search_paths=(str(good),))
         assert "evil" not in provider.binaries["apt-get"]

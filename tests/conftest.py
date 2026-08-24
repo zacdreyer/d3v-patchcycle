@@ -13,10 +13,15 @@ def fixtures_dir():
 @pytest.fixture()
 def fake_bin(tmp_path):
     """Executable-looking files for APT provider construction."""
+    import os
+
     bindir = tmp_path / "fixture-bin"
     bindir.mkdir(exist_ok=True)
     for name in ("apt-get", "dpkg", "dpkg-query", "apt-cache"):
-        (bindir / name).write_text("#!fixture\n")
+        path = bindir / name
+        path.write_text("#!fixture\n")
+        if os.name == "posix":
+            path.chmod(0o755)  # X_OK check fails on Linux without this
     return bindir
 
 
@@ -29,8 +34,13 @@ def _default_apt_binaries(fake_bin, monkeypatch):
 @pytest.fixture()
 def fake_dnf_bin(tmp_path):
     """Executable-looking files for DNF provider construction."""
+    import os
+
     bindir = tmp_path / "dnf-bin"
     bindir.mkdir()
     for name in ("dnf", "rpm"):
-        (bindir / name).write_text("#!fixture\n")
+        path = bindir / name
+        path.write_text("#!fixture\n")
+        if os.name == "posix":
+            path.chmod(0o755)
     return bindir

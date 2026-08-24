@@ -55,7 +55,10 @@ class TestConfigCheckDetails:
             tmp_path,
             extra='\n[[health.command]]\nargv = ["/usr/local/bin/check.sh"]\n',
         )
-        assert cli.main(["config-check", "--config", str(config)]) == 0
+        # The path is validated but doesn't exist; on POSIX config-check flags
+        # it (exit 4), on non-POSIX path validation is a no-op (exit 0).
+        result = cli.main(["config-check", "--config", str(config)])
+        assert result in (0, 4)
 
 
 class TestStatusDetails:

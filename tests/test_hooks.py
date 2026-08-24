@@ -110,7 +110,13 @@ class TestPathValidation:
     def test_non_root_owned_flagged_on_posix(self, tmp_path):
         if os.name != "posix":
             return
-        hook = tmp_path / "hook.sh"
-        hook.write_text("#!/bin/sh\n")
+        if os.geteuid() == 0:
+            # Running as root (e.g. CI container): chown to a non-root uid.
+            hook = tmp_path / "hook.sh"
+            hook.write_text("#!/bin/sh\n")
+            os.chown(hook, 65534, 65534)  # nobody
+        else:
+            hook = tmp_path / "hook.sh"
+            hook.write_text("#!/bin/sh\n")
         problems = validate_hook_paths(((str(hook),),))
-        assert problems  # owned by test user, not root
+        assert problems  # owned by non-root → flagged
