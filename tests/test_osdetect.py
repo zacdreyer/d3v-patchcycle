@@ -188,7 +188,20 @@ class TestProviderRegistry:
         assert provider.os_identity.os_id == "tux-os"
 
     def test_id_like_fallback(self):
-        register(FakeProvider, ids=frozenset({"tux"}), id_like=frozenset({"rhel"}))
+        # Use an ID_LIKE no built-in provider claims so the fake is selected.
+        register(FakeProvider, ids=frozenset({"tux"}), id_like=frozenset({"centos-derivative-x"}))
+        ident = OsDetector(
+            fields={"ID": "derivative-x", "ID_LIKE": "centos-derivative-x"},
+            system="Linux",
+            kernel="k",
+            arch="x86_64",
+            init="systemd",
+        ).detect()
+        assert isinstance(select_provider(ident), FakeProvider)
+
+    def test_rocky_selects_real_dnf_provider(self, fake_dnf_bin, monkeypatch):
+        """Support-honesty: RHEL-family ID_LIKE maps to the real DNF provider."""
+        monkeypatch.setattr("patchcycle.providers.dnf._DEFAULT_SEARCH_PATHS", (str(fake_dnf_bin),))
         ident = OsDetector(
             fields=load_fixture("rocky-9"),
             system="Linux",
@@ -196,7 +209,9 @@ class TestProviderRegistry:
             arch="x86_64",
             init="systemd",
         ).detect()
-        assert isinstance(select_provider(ident), FakeProvider)
+        from patchcycle.providers.dnf import DnfProvider
+
+        assert isinstance(select_provider(ident), DnfProvider)
 
     def test_unsupported_os_fails_safely(self):
         ident = OsDetector(

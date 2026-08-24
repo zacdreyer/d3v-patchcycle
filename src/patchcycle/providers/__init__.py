@@ -61,3 +61,13 @@ register(
     ids=frozenset({"debian", "ubuntu"}),
     id_like=frozenset({"debian"}),
 )
+
+# DNF provider (Phase 8 / V1.1): RHEL family. Registered per the
+# support-honesty rule; L3 container matrix is the release gate.
+from patchcycle.providers.dnf import DnfProvider  # noqa: E402
+
+register(
+    DnfProvider,
+    ids=frozenset({"rhel", "rocky", "almalinux", "fedora", "centos"}),
+    id_like=frozenset({"rhel", "fedora"}),
+)

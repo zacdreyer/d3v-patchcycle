@@ -139,10 +139,14 @@ Delivered via TDD (274 tests, 91.1% coverage):
 - L4 VM harness runs nightly in CI; first green nightly is the V1.0 release
   gate.
 
-## Phase 8 — Additional providers (post-V1, ordered)
+## Phase 8 — Additional providers (post-V1)
 
-1. **DNF** (RHEL 9 / Rocky / Alma / Fedora) — V1.1; provider-contract.md §3
-   notes exist; requires strategy-mapping ADR section + container matrix.
+1. **DNF** (RHEL 9 / Rocky / Alma / Fedora) ✅ — provider-contract §3 written;
+   `providers/dnf.py` implemented (check-update exit-100=updates inversion
+   handled per-provider, needs-restarting reboot probe, kernel fallback,
+   updateinfo security classification, `--allowerasing` gated on
+   `[updates.dnf] allow_erasing`); 33 unit + engine integration tests; L3
+   container matrix extended (rockylinux:9, almalinux:9, fedora:41).
 2. Zypper / APK / Pacman — each needs its own risk analysis (e.g. Pacman
    partial-upgrade policy) before registration.
 3. macOS (`softwareupdate` + separate Homebrew provider, launchd scheduler

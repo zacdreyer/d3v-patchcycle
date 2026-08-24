@@ -124,6 +124,7 @@ lock_file = "/run/d3v-patchcycle/lock"
 | `strategy` | enum | `safe` | Provider-mapped (provider-contract.md §2); `security` = security pocket/origin only; `full` = dist-upgrade semantics |
 | `repair_interrupted` | bool | `false` | Permit `dpkg --configure -a` recovery of interrupted transactions (never removals) |
 | `config_files.policy` | enum | `keep_existing` | `keep_existing` → dpkg `confdef`+`confold`; `take_package` → `confdef`+`confnew` (risky, ADR-0009; `config-check` warns) |
+| `dnf.allow_erasing` | bool | `false` | DNF only: permit `--allowerasing` on `full` strategy (contract §3; `config-check` warns) |
 
 ### `[reboot]`
 

@@ -171,18 +171,86 @@ Behaviour:
 - `list_updates(strategy)` re-run → `outstanding` count (expected 0; held-back
   are listed separately and do not fail verification).
 
-## 3. DNF provider (V1.1 design notes — not implemented in V1)
+## 3. DNF provider (V1.1)
 
-- Selection: `ID in {rhel, rocky, almalinux, fedora}` or `ID_LIKE` containing
-  `rhel`/`fedora` (after integration tests).
-- refresh: `dnf makecache --refresh` (or rely on `dnf upgrade --refresh`).
-- list: `dnf --refresh check-update` (exit 100 = updates available — note the
-  inverted convention vs apt-get's 100=error; parsers must be per-provider).
-- apply: `dnf -y upgrade [--security] [--refresh]`;
-  `safe`/`full` both map to `upgrade` (DNF semantics differ from APT; document
-  the mapping at implementation time; do not assume equivalence).
-- reboot probe: `dnf needs-restarting -r` (exit 1 = required).
-- verify: `dnf check` + re-run check-update.
+Applies to: `ID in {rhel, rocky, almalinux, fedora, centos}` or `ID_LIKE`
+containing `rhel` or `fedora`, **after** container integration tests pass.
+
+### Critical convention difference from APT
+
+`dnf check-update` exits **100 when updates are available**, 0 when none, 1 on
+error — the exact inversion of apt-get's `100 = error`. All exit-code handling
+is per-provider; never share exit-code assumptions across providers.
+
+### Binaries & environment
+
+- Binaries resolved from the fixed search path: `dnf`, `rpm`.
+- All invocations argv-only, scrubbed env with C locale.
+
+### preflight()
+
+1. `dnf --version` runs.
+2. Interrupted transaction probe: `dnf check` exit ≠ 0 →
+   `kind=interrupted-transaction` with detail (no auto-repair; `dnf clean
+   packages` + `dnf check` manual guidance; PatchCycle never runs
+   `package-cleanup` surgery).
+3. Lock probe: non-blocking flock probe on `/var/cache/dnf/*/lock` is not
+   reliable across versions; instead preflight runs
+   `dnf -y check-update --quiet` with a short timeout and treats "Waiting for
+   process with pid X to finish" output as `kind=pm-locked` (engine waits/
+   retries per `lock_timeout`).
+4. `pre_existing_reboot` via `reboot_required()` snapshot.
+
+### refresh()
+
+- `dnf -y makecache --refresh`. Exit 0 → ok; non-zero → fail with stderr tail.
+
+### list_updates(strategy)
+
+- `dnf --refresh --quiet check-update` — parse the three-column update lines
+  (`name.arch  version  repo`), skipping header/blank/obsoletes lines.
+- Security classification: `dnf --quiet updateinfo list --available --security`
+  marks packages with security advisories; names from that set are
+  `security=True`.
+- Strategy mapping (semantics differ from APT by design):
+  - `security` → only security-classified updates (applied via
+    `dnf upgrade --security` at apply time).
+  - `safe` (default) → all updates via `dnf upgrade` (DNF upgrade already
+    handles dependency changes; there is no "no new packages" mode equivalent
+    to apt's plain upgrade — documented difference).
+  - `full` → `dnf upgrade` as well (DNF has no dist-upgrade distinction);
+    `full` additionally allows `--allowerasing` **only** when explicitly
+    configured (`[updates.dnf] allow_erasing = true`, default false) —
+    otherwise identical to `safe`.
+- Held/excluded packages: dnf `exclude=` entries are respected (the packages
+  simply do not appear in check-update output); version-locked packages are
+  listed as such by `dnf versionlock list` and reported held.
+
+### apply_updates(strategy, updates)
+
+| Strategy | Command form |
+|---|---|
+| `security` | `dnf -y upgrade --security` |
+| `safe` | `dnf -y upgrade --refresh` |
+| `full` | `dnf -y upgrade --refresh` (+ `--allowerasing` iff configured) |
+
+- Exit 0 → parse "Upgraded:" count; kernel update detection: `kernel-core` or
+  `kernel` in upgraded set → `kernel_update=True`, `expected_kernel` = newest
+  installed `kernel-core` version-release via `rpm -q`.
+- Non-zero → `ApplyResult.ok=False` with stderr tail.
+- Timeout per `[package_manager].upgrade_timeout`.
+
+### reboot_required()
+
+`dnf needs-restarting -r` (from dnf-plugins-core): exit 1 = required, 0 = not.
+Probe error → conservative `required=True, reasons=["probe-error:..."]`. If the
+plugin is missing (exit non-zero with "No such command"), fall back to the
+kernel-not-running comparison (running vs newest installed `kernel-core`).
+
+### verify()
+
+- `dnf check` must exit 0.
+- Re-run `check-update` → outstanding count (expected 0).
 
 ## 4. Future providers (architecture-ready only)
 

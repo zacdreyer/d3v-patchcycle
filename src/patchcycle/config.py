@@ -154,10 +154,16 @@ class MaintenanceConfig:
 
 
 @dataclass(frozen=True)
+class DnfConfig:
+    allow_erasing: bool = False  # dnf full strategy escape hatch (contract §3)
+
+
+@dataclass(frozen=True)
 class UpdatesConfig:
     strategy: str = "safe"  # security | safe | full
     repair_interrupted: bool = False
     config_files_policy: str = "keep_existing"  # keep_existing | take_package
+    dnf: DnfConfig = field(default_factory=DnfConfig)
 
 
 @dataclass(frozen=True)
@@ -433,7 +439,7 @@ def parse_config(data: dict[str, Any]) -> Config:
 
     # [updates]
     u = data.get("updates", {})
-    _unknown_keys("updates", u, {"strategy", "repair_interrupted", "config_files"})
+    _unknown_keys("updates", u, {"strategy", "repair_interrupted", "config_files", "dnf"})
     cf = u.get("config_files", {})
     _unknown_keys("updates.config_files", cf, {"policy"})
     cf_policy = _enum(
@@ -447,10 +453,19 @@ def parse_config(data: dict[str, Any]) -> Config:
             "updates.config_files.policy=take_package replaces locally modified "
             "configuration files with package defaults (ADR-0009)."
         )
+    dnf_tbl = u.get("dnf", {})
+    _unknown_keys("updates.dnf", dnf_tbl, {"allow_erasing"})
+    allow_erasing = _bool("updates.dnf.allow_erasing", dnf_tbl.get("allow_erasing"), False)
+    if allow_erasing:
+        warnings.append(
+            "updates.dnf.allow_erasing=true permits dnf to remove packages during "
+            "full upgrades (--allowerasing); use with care (contract §3)."
+        )
     updates = UpdatesConfig(
         strategy=_enum("updates.strategy", u.get("strategy"), ["security", "safe", "full"], "safe"),
         repair_interrupted=_bool("updates.repair_interrupted", u.get("repair_interrupted"), False),
         config_files_policy=cf_policy,
+        dnf=DnfConfig(allow_erasing=allow_erasing),
     )
 
     # [reboot]

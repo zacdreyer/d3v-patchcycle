@@ -29,7 +29,7 @@ Built with Spec-Driven Development (SDD) and strict Test-Driven Development
 | **5** | Notifications — SMTP + webhook, delivery-failure semantics | ✅ Complete |
 | **6** | Health checks & hooks — dry-run classification, policy matrix | ✅ Complete |
 | **7** | Hardening — security sweep (T1–T14), fuzz/perf passes, coverage | ✅ Complete |
-| **8** | Additional providers — DNF (RHEL/Rocky/Alma/Fedora) → Zypper → APK → Pacman → macOS | ⏳ Post-V1 |
+| **8** | Additional providers — DNF (RHEL/Rocky/Alma/Fedora) ✅ → Zypper → APK → Pacman → macOS | 🔄 DNF done; rest planned |
 
 **Current:** `1.0.0-rc1` — 380+ tests, ~92% branch coverage, mypy `--strict`
 clean, ruff clean, zero runtime dependencies (Python 3.11+ stdlib only).
@@ -50,11 +50,12 @@ Details: [implementation plan](docs/development/implementation-plan.md).
     the maintenance outcome.
 11. Recovers conservatively from crashes, power loss, and unexpected reboots.
 
-## Supported platforms (V1)
+## Supported platforms
 
-Ubuntu Server 22.04/24.04 LTS and Debian 12/13 (APT, systemd). Detection of
-other operating systems fails safely with a clear message — support is only
-claimed for providers with passing integration tests.
+Ubuntu Server 22.04/24.04 LTS and Debian 12/13 (APT); RHEL 9, Rocky Linux 9,
+AlmaLinux 9, and Fedora 41 (DNF). All systemd-based. Detection of other
+operating systems fails safely with a clear message — support is only claimed
+for providers with passing integration tests.
 
 ## Quick start (development)
 

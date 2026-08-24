@@ -15,13 +15,15 @@ production until the L4 nightly reboot run is green and v1.0.0 is tagged.**
 
 ## Status (2026-08-23)
 
-- Phase 0–7 ✅. **V1 feature-complete at 1.0.0rc1** — 380+ tests, 91.7%
-  coverage, ruff + mypy-strict clean.
-- **V1.0 release gate: one green nightly L4 VM reboot run** (tests/vm/
-  reboot_harness.sh via .github/workflows/vm-reboot.yml). After that: tag
-  v1.0.0, then Phase 8 (DNF provider for RHEL 9/Rocky/Alma/Fedora).
-- Security sweep done (T1–T14 tests); `_PACKAGE_NAME_RE` guards package names
-  before argv; fuzzed parsers never crash; 1000-package perf bounds pass.
+- Phases 0–7 ✅; **Phase 8 DNF provider ✅** (RHEL 9/Rocky/Alma/Fedora).
+- **V1.0 release gate: one green nightly L4 VM reboot run**, then tag v1.0.0.
+- DNF key facts: `check-update` exit 100 = updates available (inverted vs
+  apt's 100=error — never share exit-code handling); `needs-restarting -r`
+  exit 1 = reboot; kernel fallback when plugin missing; `--allowerasing` only
+  with `[updates.dnf] allow_erasing=true` (default false, config warns).
+- Registry: APT (debian/ubuntu) + DNF (rhel/rocky/almalinux/fedora/centos +
+  id_like rhel/fedora). Adding a provider = register() + configure() +
+  provider tests + L3 container row.
 - Known issue: full pytest suite intermittently hangs on this Windows dev
   host (socket teardown under load). Per-file runs green; CI (Linux)
   unaffected. If CI reproduces, investigate ThreadingTCPServer teardown.
