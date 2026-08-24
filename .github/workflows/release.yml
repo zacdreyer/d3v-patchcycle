@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install -e .[dev]
+      - run: pip install -e ".[dev]"
       - run: ruff check src tests
       - run: ruff format --check src tests
       - run: mypy --strict -p patchcycle
@@ -43,7 +43,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -e .[dev]
+      - run: pip install -e ".[dev]"
       - run: pytest --cov --cov-report=term -m "not container"
 
   containers:
@@ -52,23 +52,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image:
-          - "ubuntu:22.04"
-          - "ubuntu:24.04"
-          - "debian:12"
-          - "debian:13"
-          - "rockylinux:9"
-          - "almalinux:9"
-          - "fedora:41"
+        include:
+          - image: "ubuntu:22.04"
+            alias: ubuntu_22_04
+          - image: "ubuntu:24.04"
+            alias: ubuntu_24_04
+          - image: "debian:12"
+            alias: debian_12
+          - image: "debian:13"
+            alias: debian_13
+          - image: "rockylinux:9"
+            alias: rockylinux_9
+          - image: "almalinux:9"
+            alias: almalinux_9
+          - image: "fedora:41"
+            alias: fedora_41
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install -e .[dev]
+      - run: pip install -e ".[dev]"
       - name: Container integration tests
-        run: pytest -m container tests/integration -k "${{ matrix.image }}"
+        run: pytest -m container tests/integration -k "${{ matrix.alias }}"
         env:
           PYTEST_ADDOPTS: ""
 

@@ -6,13 +6,15 @@ package manager.
 
 from __future__ import annotations
 
-import shutil
-import subprocess
-from pathlib import Path
-
 import pytest
 
-REPO = Path(__file__).resolve().parents[2]
+from .conftest import (
+    bootstrap_for,
+    container_marks,
+    image_alias,
+    python_for,
+    run_in_container,
+)
 
 MATRIX = [
     "rockylinux:9",
@@ -20,47 +22,21 @@ MATRIX = [
     "fedora:41",
 ]
 
-_DOCKER = shutil.which("docker")
-docker_available = (
-    _DOCKER is not None
-    and subprocess.run(  # noqa: S603 - fixed argv
-        [_DOCKER, "info"], capture_output=True, timeout=15, check=False
-    ).returncode
-    == 0
-)
-
-pytestmark = [
-    pytest.mark.container,
-    pytest.mark.skipif(not docker_available, reason="docker daemon unavailable"),
-]
-
-CONTAINER_SCRIPT = r"""
-set -eu
-dnf install -y -q python3 python3-pip >/dev/null
-python3 -m venv /opt/pc-venv 2>/dev/null || python3 -m pip install --quiet --target /opt/pc /src
-PIP="/opt/pc-venv/bin/pip"
-if [ ! -x "$PIP" ]; then PIP="python3 -m pip"; fi
-$PIP install -q /src 2>/dev/null || python3 -m pip install -q /src
-PC="/opt/pc-venv/bin/d3v-patchcycle"
-[ -x "$PC" ] || PC="python3 -m patchcycle"
-echo "== detect =="
-$PC detect
-echo "== OK =="
-"""
+pytestmark = container_marks
 
 
-def run_in_container(image: str, script: str, timeout: int = 900):
-    return subprocess.run(  # noqa: S603 - fixed argv, test-controlled image
-        [_DOCKER, "run", "--rm", "-v", f"{REPO}:/src:ro", image, "sh", "-c", script],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
-
-
-@pytest.mark.parametrize("image", MATRIX)
+@pytest.mark.parametrize("image", MATRIX, ids=image_alias)
 def test_detect_selects_dnf_provider(image):
-    proc = run_in_container(image, CONTAINER_SCRIPT)
+    py = python_for(image)
+    script = (
+        "set -eu\n"
+        + bootstrap_for(image)
+        + f"\n{py} -m venv /opt/pc-venv\n"
+        + "/opt/pc-venv/bin/pip install -q /src\n"
+        + 'echo "== detect =="\n'
+        + "/opt/pc-venv/bin/d3v-patchcycle detect\n"
+        + 'echo "== OK =="\n'
+    )
+    proc = run_in_container(image, script)
     assert proc.returncode == 0, f"{image}:\n{proc.stdout}\n{proc.stderr}"
     assert "Provider: dnf (supported)" in proc.stdout
