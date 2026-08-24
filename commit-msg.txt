@@ -1,8 +1,0 @@
-Fix L3 container tests: writable workdir + SPDX license + per-image python
-
-- The repo was mounted read-only (/src:ro); setuptools egg_info failed with
-  "Cannot update time stamp of directory src/d3v_patchcycle.egg-info". Copy
-  the source to a writable /work inside the container before installing.
-- pyproject license: migrated to SPDX form (license = "MIT" + license-files)
-  to clear the setuptools deprecation warning.
-- Verified locally: ubuntu:24.04 container tests pass.
