@@ -1,13 +1,18 @@
 # D3V PatchCycle — Operations Guide
 
 Status: Baseline for V1 (matches specification; current at v1.0.0-rc1)
-Date: 2026-08-23
+Date: 2026-08-24
 
 > **Pre-release notice:** D3V PatchCycle is under active development
 > (v1.0.0-rc1). The procedures below match the specification and are
 > integration-tested, but the software has not yet cut a stable release —
-> the V1.0 gate is a green nightly L4 VM reboot run. Test on non-production
-> systems first.
+> the V1.0 gate is the gated release pipeline passing, including the L4
+> real-VM reboot run. Test on non-production systems first.
+
+> The **[README](../../README.md)** contains the full install / configure /
+> schedule / use / upgrade / uninstall guide. This document covers the
+> operational detail: unattended-upgrades coexistence, reading results,
+> troubleshooting, and manual recovery.
 
 ---
 

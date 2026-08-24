@@ -15,15 +15,20 @@ production until the L4 nightly reboot run is green and v1.0.0 is tagged.**
 
 ## Status (2026-08-23)
 
-- Phases 0–7 ✅; **Phase 8 DNF provider ✅** (RHEL 9/Rocky/Alma/Fedora).
-- **V1.0 release gate: one green nightly L4 VM reboot run**, then tag v1.0.0.
-- DNF key facts: `check-update` exit 100 = updates available (inverted vs
-  apt's 100=error — never share exit-code handling); `needs-restarting -r`
-  exit 1 = reboot; kernel fallback when plugin missing; `--allowerasing` only
-  with `[updates.dnf] allow_erasing=true` (default false, config warns).
-- Registry: APT (debian/ubuntu) + DNF (rhel/rocky/almalinux/fedora/centos +
-  id_like rhel/fedora). Adding a provider = register() + configure() +
-  provider tests + L3 container row.
+- Phases 0–7 ✅; Phase 8 DNF provider ✅. Release pipeline added
+  (.github/workflows/release.yml): quality → unit matrix → L3 containers →
+  L4 real-VM reboot → publish (wheel/sdist/portable zip + SHA256SUMS).
+- **Release is GATED, not asserted**: the pipeline refuses to publish a tag
+  unless the L4 real-VM reboot harness passes. `workflow_dispatch
+  gate_only=true` runs all gates without publishing — use it to verify
+  release-readiness before tagging v1.0.0.
+- L4 harness fixed: cloud-init now injects an SSH key (was broken — no auth);
+  webhook sink is a standalone file (tests/vm/webhook_sink.py), locally
+  verified (HTTP 200, report written).
+- README is now the full install/configure/schedule/use/upgrade/uninstall
+  guide; CHANGELOG.md added; LICENSE (MIT) added.
+- Honest status: NOT production-proven until a real reboot gate passes —
+  rc1 is a release candidate. Do not tell users it's bug-free.
 - Known issue: full pytest suite intermittently hangs on this Windows dev
   host (socket teardown under load). Per-file runs green; CI (Linux)
   unaffected. If CI reproduces, investigate ThreadingTCPServer teardown.

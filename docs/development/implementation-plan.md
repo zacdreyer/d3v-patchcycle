@@ -139,6 +139,15 @@ Delivered via TDD (274 tests, 91.1% coverage):
 - L4 VM harness runs nightly in CI; first green nightly is the V1.0 release
   gate.
 
+## V1.0 release (gate)
+
+Releases are gated on proof, not assertion
+(`.github/workflows/release.yml`): quality → unit matrix (3.11–3.14) → L3
+container matrix (apt + dnf images) → **L4 real-VM reboot harness** → only
+then does a `v*` tag publish a release (wheel + sdist + portable zip +
+SHA256SUMS). Run `workflow_dispatch gate_only=true` to verify
+release-readiness without publishing. Tag `v1.0.0` only after a green gate.
+
 ## Phase 8 — Additional providers (post-V1)
 
 1. **DNF** (RHEL 9 / Rocky / Alma / Fedora) ✅ — provider-contract §3 written;
