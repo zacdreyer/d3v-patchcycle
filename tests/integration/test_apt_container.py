@@ -31,8 +31,9 @@ pytestmark = container_marks
 
 def _install_cmd(image: str) -> str:
     py = python_for(image)
+    # cwd is /work (writable copy of the repo; /src is read-only).
     return (
-        f"{bootstrap_for(image)}; {py} -m venv /opt/pc-venv; /opt/pc-venv/bin/pip install -q /src"
+        f"{bootstrap_for(image)}; {py} -m venv /opt/pc-venv; /opt/pc-venv/bin/pip install -q /work"
     )
 
 

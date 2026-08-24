@@ -32,7 +32,7 @@ def test_detect_selects_dnf_provider(image):
         "set -eu\n"
         + bootstrap_for(image)
         + f"\n{py} -m venv /opt/pc-venv\n"
-        + "/opt/pc-venv/bin/pip install -q /src\n"
+        + "/opt/pc-venv/bin/pip install -q /work\n"
         + 'echo "== detect =="\n'
         + "/opt/pc-venv/bin/d3v-patchcycle detect\n"
         + 'echo "== OK =="\n'

@@ -81,8 +81,12 @@ def run_in_container(
     image: str, script: str, timeout: int = 900
 ) -> subprocess.CompletedProcess[str]:
     assert _DOCKER is not None
+    # Copy the mounted (read-only) source to a writable location: setuptools'
+    # egg_info must write build artifacts, which fails on a ro mount. Copying
+    # also keeps the host working tree untouched.
+    inner = "cp -r /src /work >/dev/null 2>&1; cd /work; " + script
     return subprocess.run(  # noqa: S603 - fixed argv, test-controlled image
-        [_DOCKER, "run", "--rm", "-v", f"{REPO}:/src:ro", image, "sh", "-c", script],
+        [_DOCKER, "run", "--rm", "-v", f"{REPO}:/src:ro", image, "sh", "-c", inner],
         capture_output=True,
         text=True,
         timeout=timeout,
