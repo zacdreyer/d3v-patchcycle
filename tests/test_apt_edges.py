@@ -64,7 +64,7 @@ class TestListUpdatesEdges:
         provider = make_provider(runner, state_root=tmp_path)
         assert provider.list_updates("safe") == []
 
-    def test_policy_failure_means_no_security_classification(self, tmp_path):
+    def test_policy_failure_refuses_unknown_security_classification(self, tmp_path):
         runner = FakeRunner(
             {
                 ("-s", "upgrade"): CommandResult(0, SIM_UPGRADE, ""),
@@ -72,8 +72,10 @@ class TestListUpdatesEdges:
             }
         )
         provider = make_provider(runner, state_root=tmp_path)
-        updates = provider.list_updates("safe")
-        assert all(not u.security for u in updates)
+        from patchcycle.errors import PreflightError
+
+        with pytest.raises(PreflightError):
+            provider.list_updates("safe")
 
     def test_reboot_hints_flagged(self, tmp_path):
         runner = FakeRunner(

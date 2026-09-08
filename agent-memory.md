@@ -10,39 +10,61 @@ native package manager → safe reboot → auto-resume → verify → health che
 notify admin. Local-only, no daemon, no listeners, no DB. Governing
 principle: *a clearly-reported failure beats a guessed/forced success.*
 
-**Pre-release: v1.0.0-rc1, under active development. Do not deploy to
-production until the L4 nightly reboot run is green and v1.0.0 is tagged.**
+**Pre-release working tree: 1.0.0rc2, state schema v2. NOT production ready.** Local audit remediation and acceptance tests passed. Final artifacts,
+committed live CI and target-host staging govern stable release approval.
 
-## Status (2026-08-23)
+## Current status (2026-09-09)
 
-- Phases 0–7 ✅; Phase 8 DNF provider ✅. Release pipeline added
-  (.github/workflows/release.yml): quality → unit matrix → L3 containers →
-  L4 real-VM reboot → publish (wheel/sdist/portable zip + SHA256SUMS).
-- **Release is GATED, not asserted**: the pipeline refuses to publish a tag
-  unless the L4 real-VM reboot harness passes. `workflow_dispatch
-  gate_only=true` runs all gates without publishing — use it to verify
-  release-readiness before tagging v1.0.0.
-- L4 harness fixed: cloud-init now injects an SSH key (was broken — no auth);
-  webhook sink is a standalone file (tests/vm/webhook_sink.py), locally
-  verified (HTTP 200, report written).
-- README is now the full install/configure/schedule/use/upgrade/uninstall
-  guide; CHANGELOG.md added; LICENSE (MIT) added.
-- Honest status: NOT production-proven until a real reboot gate passes —
-  rc1 is a release candidate. Do not tell users it's bug-free.
-- Known issue: full pytest suite intermittently hangs on this Windows dev
-  host (socket teardown under load). Per-file runs green; CI (Linux)
-  unaffected. If CI reproduces, investigate ThreadingTCPServer teardown.
-- Installer exists: `install`/`uninstall [--purge]`/`schedule` commands,
-  systemd unit rendering (timer Persistent=true, hardened oneshot services,
-  always-on resume unit), idempotent, `systemd-analyze calendar`/`verify`
-  validation. FR-S15 seam: `_resume_unit_enabled` uses the installer's
-  systemd call so names can never drift.
-- L4 VM harness scripted: tests/vm/reboot_harness.sh + nightly workflow
-  .github/workflows/vm-reboot.yml (KVM, real reboot, webhook report check).
-- APT provider registered for debian/ubuntu(+id_like). `run`/`updates` now
-  work on real Debian/Ubuntu hosts.
+- User authorized execution through production readiness, including code, tests,
+  SDD/TDD and memory changes. Continue the existing audit; do not restart it.
+- Baseline is `1c98c9e`. Candidate **1.0.0rc2 / schema 2** is prepared on
+  `release/1.0.0rc2-readiness`; CI/release gates run on release-branch pushes.
+  No stable release, tag, deployment or live GitHub CI result has been verified.
+- The source audit reviewed all production modules and found 25 initial grouped
+  issues, followed by additional native/systemd failures. Implemented fixes cover
+  durable reboot facts/retries/verified boot identity; reboot-first and recovery;
+  corruption refusal, strict state and protected files; clean/custom installation
+  and uninstall locking; native PM locks/versionlocks/version ordering; truthful
+  durable reports; TLS/redirect/secret protections; process-group timeouts.
+- Further fixes: package scripts require SUID/SGID permission changes, so both
+  systemd units explicitly set RestrictSUIDSGID=false. A real guest reproduced
+  the blocked chmod before the fix. Failed security metadata/audit probes now
+  fail closed; partial refresh needs evidence of a successful repo and warnings
+  survive into reports. Reboot retries recheck policy/window after hooks.
+- Scope: Ubuntu 22.04/24.04, Debian 12/13, Rocky 9, AlmaLinux 9, Fedora 44,
+  x86_64/systemd. Unlisted versions and built-in ID_LIKE fallbacks are refused.
+  RHEL/CentOS are not claimed without direct acceptance evidence.
+- Final Linux Python 3.11/3.12/3.13/3.14: 601 passed each, 91.58% coverage.
+  Windows Python 3.13: 587 passed, 14 POSIX skips, 90.59%. Ruff, strict mypy,
+  CI guard, local documentation links and workflow YAML checks passed.
+- Final L3: 11 tests across all seven platforms. Separate final strategy runs:
+  APT 8 passed / DNF 3 passed, including actual security and full upgrades,
+  native holds/versionlocks, APT native locks and interrupted repair.
+- Final L4 normal run: 911ba2fc-475d-4205-a317-80dc205c5218. Wheel-installed
+  actual upgrade, SUID restoration, reboot/resume, health and webhook passed.
+  Power-cut run: 8a154872-610d-4da5-a885-da0b320d9160. Lost power during
+  postinst; correctly failed unexpected-reboot at UPGRADING, no silent repair.
+  Both proved durable JSON/text archive, persisted delivery success, IDLE,
+  idempotent install and history-preserving uninstall/reinstall. Evidence:
+  docs/development/evidence/delivery-*. Earlier final-* files are historical.
+- Additional fixes: native DNF5 advisory parsing, exact APT security candidate
+  pinning, strict nested state, truthful unperformed checks, private webhook
+  display, and purge refusal for unrelated or invalid state files.
+- Final wheel/sdist/portable ZIP passed build, twine, checksum and clean install
+  checks. Wheel modules match workspace bytes; source hashes and dependency
+  audit (no known vulnerabilities) are in the evidence index. Artifacts are in
+  dist/. Runtime has no third-party dependencies.
+- Preserve pre-existing untracked `repro-ci.sh`. Disposable validation container
+  `patchcycle-readiness-audit` mounts this workspace read-only at /source;
+  /candidate is the final writable source snapshot. No host PM/reboot commands were run.
+- Remaining work is tracked in docs/development/production-readiness.md and
+  docs/development/code-audit.md. Do not label staging or live CI verified.
 
-## Phase 3 implementation notes
+The notes below preserve historical context. Locked decisions and architecture
+state requirements; the audit must verify enforcement. The checklist overrides
+old completion claims.
+
+## Historical Phase 3 implementation notes
 
 - `subproc.run_argv`: argv-only (string → TypeError), scrubbed env
   (PATH/LANG/LC_ALL only + explicit extra_env), timeout terminate→kill.
@@ -59,7 +81,7 @@ production until the L4 nightly reboot run is green and v1.0.0 is tagged.**
 - Engine fix: PreflightError(kind=...) preserves pm-locked/interrupted-
   transaction kinds into state error.kind.
 
-## Phase 2 implementation notes
+## Historical Phase 2 implementation notes
 
 - Layout: src layout, console script `d3v-patchcycle = patchcycle.cli:main`.
 - Engine: `_drive()` loop over `_HANDLERS`; transitions persisted BEFORE
@@ -89,7 +111,7 @@ production until the L4 nightly reboot run is green and v1.0.0 is tagged.**
    BEFORE each state's action runs.
 5. Explicit provider registry (ID/ID_LIKE); support only when
    integration-tested (support-honesty rule).
-6. State: `/var/lib/d3v-patchcycle/state.json`, JSON schema v1, temp+fsync+
+6. State: `/var/lib/d3v-patchcycle/state.json`, JSON schema v2 (ADR-0010), temp+fsync+
    replace+fsync; corrupt → quarantine + refuse.
 7. Notifications: SMTP + webhook V1; delivery failure ≠ cycle failure; report
    always persisted to history.
@@ -98,7 +120,7 @@ production until the L4 nightly reboot run is green and v1.0.0 is tagged.**
 9. dpkg conffile default confdef+confold; force/allow-* flags prohibited
    (static source-scan test enforces).
 
-## Key architecture facts
+## Intended architecture and policies (audit compliance)
 
 - Entry: CLI `d3v-patchcycle {run,resume,status,updates,detect,config-check,
   history,version,install,uninstall}`; exit codes 0..6 per product spec §8.

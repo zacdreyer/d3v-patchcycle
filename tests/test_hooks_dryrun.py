@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -11,7 +12,7 @@ from patchcycle.hooks import HOOK_CLASSIFICATION, HookRunner, classify_hooks
 
 
 def py_hook(code: str) -> tuple[str, ...]:
-    return (sys.executable, "-c", code)
+    return (str(Path(sys.executable).resolve()), "-c", code)
 
 
 class TestClassification:
@@ -85,4 +86,4 @@ class TestFailurePolicyMatrix:
         runner = HookRunner(HooksConfig())
         results = runner.run_all((py_hook("print('out')"),), "before_upgrade")
         assert results[0].ok is True
-        assert results[0].hook == sys.executable
+        assert results[0].hook == str(Path(sys.executable).resolve())

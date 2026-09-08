@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from patchcycle.config import HealthCheckConfig
 from patchcycle.health import HealthCheckRunner
@@ -65,13 +66,13 @@ class TestCheckKinds:
             "command",
             critical=True,
             name="true",
-            argv=(sys.executable, "-c", "pass"),
+            argv=(str(Path(sys.executable).resolve()), "-c", "pass"),
         )
         bad_check = HealthCheckConfig(
             "command",
             critical=True,
             name="false",
-            argv=(sys.executable, "-c", "import sys; sys.exit(1)"),
+            argv=(str(Path(sys.executable).resolve()), "-c", "import sys; sys.exit(1)"),
         )
         results = runner.run((ok_check, bad_check))
         assert results[0].ok is True

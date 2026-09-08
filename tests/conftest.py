@@ -5,6 +5,21 @@ import pytest
 FIXTURES = __import__("pathlib").Path(__file__).parent / "fixtures"
 
 
+@pytest.fixture(autouse=True)
+def private_fixture_files():
+    """Fixtures containing config/state must match production's private modes.
+
+    Tests of unsafe permissions explicitly chmod their malicious fixtures.
+    """
+    import os
+
+    previous = os.umask(0o077)
+    try:
+        yield
+    finally:
+        os.umask(previous)
+
+
 @pytest.fixture()
 def fixtures_dir():
     return FIXTURES

@@ -1,0 +1,15 @@
+Warning: Permanently added '[127.0.0.1]:10024' (ED25519) to the list of known hosts.
+config OK: /etc/d3v-patchcycle/config.toml
+schedule: manual sunday 02:00 (random delay 300s)
+notifiers: webhook (configured)
+state: IDLE (no active maintenance cycle)
+last cycle: 911ba2fc-475d-4205-a317-80dc205c5218 -> success (2026-09-08T21:22:16Z)
+notification webhook: sent
+2026-09-08T21:22:16Z  911ba2fc-475d-4205-a317-80dc205c5218  success  updates=1/1  reboot=yes
+installed (0 path(s) written)
+next: d3v-patchcycle config-check && d3v-patchcycle run --dry-run
+uninstalled; configuration, state, logs and history preserved
+installed (2 path(s) written)
+  /etc/systemd/system/d3v-patchcycle.service
+  /etc/systemd/system/d3v-patchcycle-resume.service
+next: d3v-patchcycle config-check && d3v-patchcycle run --dry-run

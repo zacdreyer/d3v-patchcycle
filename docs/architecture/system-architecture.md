@@ -136,7 +136,7 @@ systemd units installed by `d3v-patchcycle install`:
 
 ## 6. State manager & reboot/resume architecture
 
-- One state file: `/var/lib/d3v-patchcycle/state.json` (schema v1, see
+- One state file: `/var/lib/d3v-patchcycle/state.json` (schema v2, see
   `docs/specifications/state-machine.md` §6). At most one active cycle exists;
   completed cycles are archived to
   `/var/lib/d3v-patchcycle/history/<run_id>.json` and `state.json` returns to
@@ -174,7 +174,7 @@ systemd units installed by `d3v-patchcycle install`:
    automatically by the kernel on death — **stale locks are impossible**.
    Second instance → exit code 3.
 3. **Package-manager layer:** providers detect apt/dpkg lock contention
-   (flock probe on `/var/lib/dpkg/lock-frontend` and friends), wait up to
+   (POSIX record-lock probe on `/var/lib/dpkg/lock-frontend` and friends), wait up to
    `[package_manager].lock_timeout` (default 15m, poll 15s), then abort with
    exit 2 and notify. PatchCycle never kills package processes and never
    deletes lock files.

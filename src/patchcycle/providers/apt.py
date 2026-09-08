@@ -46,7 +46,7 @@ _APT_ERROR = 100
 # Matches lines like:
 #   Inst libc6 [2.39-0ubuntu8.3] (2.39-0ubuntu8.4 Ubuntu:24.04/noble-updates [amd64])
 #   Inst linux-image-generic [6.8.0-55.57] (6.8.0-60.62 Ubuntu:24.04 [amd64]) []
-_INST_RE = re.compile(r"^Inst\s+(\S+)\s+\[([^\]]+)\]\s+\((\S+)")
+_INST_RE = re.compile(r"^Inst\s+(\S+)\s+(?:\[([^\]]+)\]\s+)?\((\S+)")
 # Kept-back list entries: "  pkg (old => new)" — only inside the kept-back block.
 _KEPT_RE = re.compile(r"^\s{2,}(\S+)\s+\((\S+)\s+=>\s+(\S+)\)")
 _SECURITY_POCKET_RE = re.compile(r"-security[ /]")
@@ -74,10 +74,10 @@ def probe_lock(path: Path) -> bool:
         fd = os.open(path, os.O_RDWR)
         try:
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except OSError:
                 return True
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            fcntl.lockf(fd, fcntl.LOCK_UN)
             return False
         finally:
             os.close(fd)
@@ -102,7 +102,7 @@ def parse_simulation(output: str) -> list[UpdateInfo]:
         m = _INST_RE.match(line)
         if m:
             updates.append(
-                UpdateInfo(name=m.group(1), version_from=m.group(2), version_to=m.group(3))
+                UpdateInfo(name=m.group(1), version_from=m.group(2) or "", version_to=m.group(3))
             )
             continue
         # "The following packages have been kept back:" list lines; the block
@@ -110,9 +110,15 @@ def parse_simulation(output: str) -> list[UpdateInfo]:
         # "Inst ..." actions that follow).
         if line.startswith("The following packages have been kept back:"):
             for kept_line in lines[i + 1 :]:
-                km = _KEPT_RE.match(kept_line)
-                if not km or "Inst " in kept_line:
+                if not kept_line.startswith("  "):
                     break
+                km = _KEPT_RE.match(kept_line)
+                if not km:
+                    names = kept_line.split()
+                    if not names or not all(_PACKAGE_NAME_RE.fullmatch(name) for name in names):
+                        break
+                    updates.extend(UpdateInfo(name, "", "", held=True) for name in names)
+                    continue
                 updates.append(
                     UpdateInfo(
                         name=km.group(1),
@@ -129,23 +135,25 @@ def parse_policy_security(policy_output: str) -> set[str]:
     """Names whose candidate comes from a *-security pocket (apt-cache policy)."""
     security: set[str] = set()
     current: str | None = None
-    seen_candidate = False
+    candidate: str | None = None
+    in_candidate = False
     for line in policy_output.splitlines():
         if line and not line.startswith(" ") and line.endswith(":"):
             current = line[:-1].strip()
-            seen_candidate = False
+            candidate = None
+            in_candidate = False
             continue
         if current is None:
             continue
         stripped = line.strip()
         if stripped.startswith("Candidate:"):
-            seen_candidate = True
+            candidate = stripped.partition(":")[2].strip()
             continue
-        # Candidate version entry: "     <version> <pin>" then its origin lines.
-        if seen_candidate and re.match(r"^\d{3}\s+\S+", stripped):
-            if _SECURITY_POCKET_RE.search(stripped):
-                security.add(current)
-            seen_candidate = False
+        version = re.fullmatch(r"(?:\*\*\*\s+)?(\S+)\s+-?\d+", stripped)
+        if version:
+            in_candidate = version.group(1) == candidate
+        elif in_candidate and _SECURITY_POCKET_RE.search(stripped):
+            security.add(current)
     return security
 
 
@@ -240,7 +248,7 @@ class AptProvider(UpdateProvider):
             detail = version.stderr.strip() or "apt-get --version failed"
             return PreflightResult(ok=False, kind="pm-unhealthy", detail=detail)
         audit = self._runner([self.binaries["dpkg"], "--audit"], timeout=120, extra_env=self._env())
-        if audit.stdout.strip():
+        if audit.exit_code != 0 or audit.stdout.strip():
             return PreflightResult(
                 ok=False,
                 kind="interrupted-transaction",
@@ -277,6 +285,19 @@ class AptProvider(UpdateProvider):
             warnings=tuple(warnings),
         )
 
+    def repair_interrupted(self) -> PreflightResult:
+        """Finish pending configuration only; never removes packages."""
+        result = self._runner(
+            [self.binaries["dpkg"], "--force-confdef", "--force-confold", "--configure", "-a"],
+            timeout=self._upgrade_timeout,
+            extra_env=self._env(),
+        )
+        if result.exit_code != 0:
+            return PreflightResult(
+                False, "interrupted-transaction", "dpkg configuration repair failed"
+            )
+        return self.preflight()
+
     def refresh(self) -> RefreshResult:
         try:
             result = self._apt("update", timeout=self._refresh_timeout)
@@ -284,13 +305,15 @@ class AptProvider(UpdateProvider):
             return RefreshResult(ok=False, detail=str(exc))
         except OSError as exc:
             return RefreshResult(ok=False, detail=f"cannot execute apt-get: {exc}")
-        if result.exit_code == 0:
-            return RefreshResult(ok=True)
-        # Partial repo failure: some indexes downloaded (apt logs W: lines).
-        if "W:" in result.stderr and "Failed to fetch" in result.stderr:
+        warnings = tuple(line.strip() for line in result.stderr.splitlines() if line.strip())
+        failed_fetch = "Failed to fetch" in result.stderr or "failed to download" in result.stderr
+        if result.exit_code == 0 and not failed_fetch:
+            return RefreshResult(ok=True, warnings=warnings)
+        # A warning alone does not prove that any repository was refreshed.
+        if failed_fetch and re.search(r"^(?:Hit|Get):\d+\s", result.stdout, re.MULTILINE):
             return RefreshResult(
                 ok=True,
-                warnings=tuple(line.strip() for line in result.stderr.splitlines() if line.strip()),
+                warnings=warnings,
             )
         return RefreshResult(
             ok=False,
@@ -298,6 +321,7 @@ class AptProvider(UpdateProvider):
         )
 
     def list_updates(self, strategy: str) -> list[UpdateInfo]:
+        self._strategy = strategy
         target = "dist-upgrade" if strategy == "full" else "upgrade"
         sim = self._apt("-s", target, timeout=120)
         if sim.exit_code != 0:
@@ -334,7 +358,7 @@ class AptProvider(UpdateProvider):
             extra_env=self._env(),
         )
         if result.exit_code != 0:
-            return set()
+            raise PreflightError("apt-cache policy failed; security classification is unavailable")
         return parse_policy_security(result.stdout)
 
     def apply_updates(self, strategy: str, updates: list[UpdateInfo]) -> ApplyResult:
@@ -350,7 +374,7 @@ class AptProvider(UpdateProvider):
         ]
         if strategy == "security":
             targets = [
-                u.name
+                f"{u.name}={u.version_to}"
                 for u in updates
                 if u.security and not u.held and _PACKAGE_NAME_RE.match(u.name)
             ]
@@ -412,9 +436,14 @@ class AptProvider(UpdateProvider):
                 detail=(check.stderr or check.stdout).strip()[-1000:],
             )
         audit = self._runner([self.binaries["dpkg"], "--audit"], timeout=120, extra_env=self._env())
-        if audit.stdout.strip():
-            return VerifyResult(consistent=False, detail="dpkg --audit: " + audit.stdout.strip())
-        outstanding = len([u for u in self.list_updates("safe") if not u.held])
+        if audit.exit_code != 0 or audit.stdout.strip():
+            return VerifyResult(
+                consistent=False,
+                detail="dpkg --audit failed: " + (audit.stdout or audit.stderr).strip(),
+            )
+        outstanding = len(
+            [u for u in self.list_updates(getattr(self, "_strategy", "safe")) if not u.held]
+        )
         return VerifyResult(consistent=True, outstanding=outstanding)
 
     # ------------------------------------------------------------ helpers
@@ -422,29 +451,40 @@ class AptProvider(UpdateProvider):
     def _newest_installed_kernel(self) -> str | None:
         """Newest installed linux-image release (running-kernel comparison)."""
         result = self._runner(
-            [self.binaries["dpkg-query"], "-W", "-f=${Package}\t${Version}\n", "linux-image-*"],
+            [
+                self.binaries["dpkg-query"],
+                "-W",
+                "-f=${Package}\t${Version}\t${db:Status-Status}\n",
+                "linux-image-*",
+            ],
             timeout=60,
             extra_env=self._env(),
         )
         if result.exit_code != 0:
             return None
         best: str | None = None
+        best_version = ""
         for line in result.stdout.splitlines():
             parts = line.split("\t")
-            if len(parts) != 2:
+            if len(parts) not in (2, 3):
                 continue
-            package, version = parts
-            if not package.startswith("linux-image-"):
+            package, version = parts[:2]
+            if len(parts) == 3 and parts[2] != "installed":
                 continue
-            if package.endswith("-generic") and package.count("-") < 3:
-                # meta packages carry no bootable version on their own
+            match = re.fullmatch(r"linux-image-(?:unsigned-)?(\d[^\s]*)", package)
+            if not match:
                 continue
-            release = _kernel_release_from_package(version)
-            flavour = package[len("linux-image-") :]
-            flavour_suffix = flavour[len(release) :] if flavour.startswith(release) else ""
-            candidate = release + flavour_suffix
-            if best is None or candidate > best:
-                best = candidate
+            newer = (
+                best is None
+                or self._runner(
+                    [self.binaries["dpkg"], "--compare-versions", version, "gt", best_version],
+                    timeout=30,
+                    extra_env=self._env(),
+                ).exit_code
+                == 0
+            )
+            if newer:
+                best, best_version = match.group(1), version
         return best
 
 

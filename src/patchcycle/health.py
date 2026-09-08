@@ -33,7 +33,7 @@ class HealthCheckRunner:
         run_command: Callable[[tuple[str, ...], float], tuple[int, str]] | None = None,
         failed_units: Callable[[], tuple[int, str]] | None = None,
     ) -> None:
-        self._service_active = service_active or _default_service_active
+        self._service_active = service_active
         self._http_get = http_get or _default_http_get
         self._tcp_connect = tcp_connect or _default_tcp_connect
         self._run_command = run_command or _default_run_command
@@ -49,7 +49,11 @@ class HealthCheckRunner:
         ok, detail = False, ""
         try:
             if check.kind == "service":
-                ok, detail = self._service_active(check.name)
+                ok, detail = (
+                    self._service_active(check.name)
+                    if self._service_active
+                    else _default_service_active(check.name, check.timeout_s)
+                )
             elif check.kind == "http":
                 status, detail = self._http_get(check.url, check.timeout_s)
                 ok = status == check.expected_status
@@ -72,7 +76,10 @@ class HealthCheckRunner:
         )
 
     def _check_failed_units(self) -> HealthResult:
-        count, detail = self._failed_units()
+        try:
+            count, detail = self._failed_units()
+        except Exception as exc:
+            count, detail = -1, f"failed-units probe failed: {type(exc).__name__}"
         return HealthResult(
             kind="failed-units",
             name="systemd-failed-units",
@@ -82,7 +89,7 @@ class HealthCheckRunner:
         )
 
 
-def _default_service_active(name: str) -> tuple[bool, str]:
+def _default_service_active(name: str, timeout: float = 10) -> tuple[bool, str]:
     unit = name if "." in name else f"{name}.service"
     # S603: argv list, no shell, scrubbed env, name validated by config schema.
     proc = subprocess.run(  # noqa: S603
@@ -91,6 +98,7 @@ def _default_service_active(name: str) -> tuple[bool, str]:
         env=_CHECK_ENV,
         capture_output=True,
         text=True,
+        timeout=timeout,
         check=False,
     )
     return proc.returncode == 0, proc.stdout.strip()
@@ -119,17 +127,18 @@ def _default_tcp_connect(host: str, port: int, timeout: float) -> tuple[bool, st
 
 
 def _default_run_command(argv: tuple[str, ...], timeout: float) -> tuple[int, str]:
-    # S603: argv list, no shell, scrubbed env, absolute path enforced by config.
-    proc = subprocess.run(  # noqa: S603
+    from patchcycle.hooks import validate_hook_paths
+    from patchcycle.subproc import run_argv
+
+    problems = validate_hook_paths((argv,))
+    if problems:
+        return -1, "; ".join(problems)
+    proc = run_argv(
         list(argv),
-        shell=False,
-        env=_CHECK_ENV,
-        capture_output=True,
-        text=True,
+        extra_env=_CHECK_ENV,
         timeout=timeout,
-        check=False,
     )
-    return proc.returncode, (proc.stderr or proc.stdout or "")[-500:]
+    return proc.exit_code, (proc.stderr or proc.stdout or "")[-500:]
 
 
 def _default_failed_units() -> tuple[int, str]:  # pragma: no cover - Linux/systemd-only (L3)
@@ -140,13 +149,18 @@ def _default_failed_units() -> tuple[int, str]:  # pragma: no cover - Linux/syst
         env=_CHECK_ENV,
         capture_output=True,
         text=True,
+        timeout=10,
         check=False,
     )
     if proc.returncode != 0:
-        return 0, f"failed-units probe unavailable: {proc.stderr.strip()}"
+        return -1, f"failed-units probe unavailable: {proc.stderr.strip()}"
     try:
         units = json.loads(proc.stdout or "[]")
     except ValueError:
-        return 0, "failed-units probe returned unparsable output"
-    names = [u.get("unit", "?") for u in units] if isinstance(units, list) else []
+        return -1, "failed-units probe returned unparsable output"
+    if not isinstance(units, list) or not all(
+        isinstance(u, dict) and isinstance(u.get("unit"), str) for u in units
+    ):
+        return -1, "failed-units probe returned invalid unit records"
+    names = [u["unit"] for u in units]
     return len(names), ", ".join(names)

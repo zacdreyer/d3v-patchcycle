@@ -10,6 +10,7 @@ resume-unit existence check is the injected ``resume_path_ok`` callable
 from __future__ import annotations
 
 import enum
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -55,16 +56,28 @@ class RebootController:
         if policy == "when_required" and not reboot_required:
             return RebootDecision(RebootAction.SKIP, "no reboot required")
         if not self.config.allow_if_users_logged_in and self.users_logged_in():
-            return RebootDecision(
-                RebootAction.DEFER_MANUAL, "users logged in and policy forbids reboot"
-            )
+            waited = 0
+            while self.users_logged_in() and waited < self.config.user_wait_timeout_s:
+                delay = min(30, self.config.user_wait_timeout_s - waited)
+                self.sleeper(delay)
+                waited += delay
+            if self.users_logged_in():
+                return RebootDecision(
+                    RebootAction.DEFER_MANUAL, "users logged in and policy forbids reboot"
+                )
         if not self.window.allows_disruptive(self.now_local(), estimate_s):
             return RebootDecision(
                 RebootAction.DEFER_MANUAL, "insufficient maintenance window remaining"
             )
         return RebootDecision(RebootAction.REBOOT)
 
-    def prepare_and_reboot(self, cycle: CycleState, *, now_iso: Callable[[], str]) -> CycleState:
+    def prepare_and_reboot(
+        self,
+        cycle: CycleState,
+        *,
+        now_iso: Callable[[], str],
+        persist: Callable[[CycleState], None],
+    ) -> CycleState:
         """Persist pre-reboot facts, verify the resume path, then reboot.
 
         Returns the updated cycle (callers persist it via the engine). Raises
@@ -78,15 +91,25 @@ class RebootController:
             )
         from dataclasses import replace
 
-        cycle = replace(
-            cycle,
-            boot_id_before=self.boot_id_reader(),
-            kernel_before=self.kernel_reader(),
-            reboot_initiated_at=now_iso(),
-            reboot_attempts=cycle.reboot_attempts + 1,
-        )
-        self.rebooter()
-        return cycle
+        while cycle.reboot_attempts < self.max_attempts:
+            cycle = replace(
+                cycle,
+                boot_id_before=self.boot_id_reader(),
+                boot_id_after=None,
+                kernel_before=self.kernel_reader(),
+                reboot_initiated_at=cycle.reboot_initiated_at or now_iso(),
+                reboot_attempts=cycle.reboot_attempts + 1,
+            )
+            if not cycle.boot_id_before:
+                raise RebootError("cannot establish boot identity; refusing reboot")
+            persist(cycle)
+            try:
+                self.rebooter()
+                return cycle
+            except (OSError, subprocess.SubprocessError):
+                if cycle.reboot_attempts < self.max_attempts:
+                    self.sleeper(30)
+        raise RebootError("reboot command retry budget exhausted; manual intervention required")
 
     def verify_rebooted(self, cycle: CycleState) -> str:
         """Confirm a genuine reboot occurred; returns the current boot ID.
@@ -95,7 +118,9 @@ class RebootController:
         expected kernel is not running (FR-S13).
         """
         current = self.boot_id_reader()
-        if cycle.boot_id_before is not None and current == cycle.boot_id_before:
+        if not cycle.boot_id_before or not current:
+            raise RebootError("missing boot identity: cannot verify reboot")
+        if current == cycle.boot_id_before:
             raise RebootError("boot ID unchanged: the requested reboot did not occur (FR-S7)")
         running_kernel = self.kernel_reader()
         if cycle.expected_kernel and running_kernel != cycle.expected_kernel:

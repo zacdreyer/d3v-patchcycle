@@ -38,6 +38,12 @@ class UpdateProvider(ABC):
     def preflight(self) -> PreflightResult:
         """Verify PM health, lock availability, interrupted transactions."""
 
+    def repair_interrupted(self) -> PreflightResult:
+        """Explicit opt-in repair; unsupported providers require manual recovery."""
+        return PreflightResult(
+            False, "interrupted-transaction", "manual package-manager repair required"
+        )
+
     @abstractmethod
     def refresh(self) -> RefreshResult:
         """Update package indexes only. Never installs/removes."""

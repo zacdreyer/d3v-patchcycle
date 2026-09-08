@@ -1,0 +1,34 @@
+Sep 08 13:42:44 patchcycle-test systemd[1]: Starting d3v-patchcycle.service - D3V PatchCycle maintenance run...
+Sep 08 13:42:45 patchcycle-test d3v-patchcycle[2807]: INFO state IDLE -> PRECHECK
+Sep 08 13:42:45 patchcycle-test d3v-patchcycle[2807]: INFO state PRECHECK -> REBOOT_PENDING
+-- Boot 26a3fcf3162a432d9f507f5df44af1df --
+Sep 08 14:09:57 patchcycle-test systemd[1]: Starting d3v-patchcycle-resume.service - D3V PatchCycle post-boot maintenance resume...
+Sep 08 14:10:05 patchcycle-test d3v-patchcycle-resume[584]: ERROR cycle failed at REBOOT_PENDING: unexpected-reboot during REBOOT_PENDING; read-only diagnostics: PreflightResult(ok=True, kind='', detail='', pre_existing_reboot=False, warnings=('apt-daily.timer is active: unattended-upgrades may contend for apt locks at boot (operations.md §4)',)); VerifyResult(consistent=True, outstanding=0, detail='')
+Sep 08 14:10:05 patchcycle-test d3v-patchcycle-resume[584]: INFO state REBOOT_PENDING -> FAILED
+Sep 08 14:10:05 patchcycle-test systemd[1]: d3v-patchcycle-resume.service: Main process exited, code=exited, status=1/FAILURE
+Sep 08 14:10:05 patchcycle-test systemd[1]: d3v-patchcycle-resume.service: Failed with result 'exit-code'.
+Sep 08 14:10:05 patchcycle-test systemd[1]: Failed to start d3v-patchcycle-resume.service - D3V PatchCycle post-boot maintenance resume.
+Sep 08 14:10:05 patchcycle-test systemd[1]: d3v-patchcycle-resume.service: Consumed 6.445s CPU time, 91.4M memory peak.
+Sep 08 14:30:28 patchcycle-test systemd[1]: Starting d3v-patchcycle.service - D3V PatchCycle maintenance run...
+Sep 08 14:30:29 patchcycle-test d3v-patchcycle[774]: INFO state IDLE -> PRECHECK
+Sep 08 14:30:29 patchcycle-test d3v-patchcycle[774]: INFO state PRECHECK -> REBOOT_PENDING
+Sep 08 14:30:29 patchcycle-test d3v-patchcycle[774]: INFO state REBOOT_PENDING -> REBOOTING
+Sep 08 14:30:29 patchcycle-test systemd[1]: d3v-patchcycle.service: Deactivated successfully.
+Sep 08 14:30:29 patchcycle-test systemd[1]: Stopped d3v-patchcycle.service - D3V PatchCycle maintenance run.
+Sep 08 14:30:29 patchcycle-test systemd[1]: d3v-patchcycle.service: Consumed 1.455s CPU time, 16.5M memory peak.
+-- Boot 2abaf188df24495891bc3b94ea991b95 --
+Sep 08 14:31:00 patchcycle-test systemd[1]: Starting d3v-patchcycle-resume.service - D3V PatchCycle post-boot maintenance resume...
+Sep 08 14:31:05 patchcycle-test d3v-patchcycle-resume[588]: INFO state REBOOTING -> POST_REBOOT
+Sep 08 14:31:05 patchcycle-test d3v-patchcycle-resume[588]: INFO state POST_REBOOT -> PRECHECK
+Sep 08 14:31:06 patchcycle-test d3v-patchcycle-resume[588]: INFO state PRECHECK -> REFRESHING
+Sep 08 14:31:16 patchcycle-test d3v-patchcycle-resume[588]: INFO state REFRESHING -> DISCOVERING_UPDATES
+Sep 08 14:31:19 patchcycle-test d3v-patchcycle-resume[588]: INFO updates: 0 applicable, 0 held-back
+Sep 08 14:31:19 patchcycle-test d3v-patchcycle-resume[588]: INFO state DISCOVERING_UPDATES -> CHECKING_REBOOT
+Sep 08 14:31:19 patchcycle-test d3v-patchcycle-resume[588]: INFO state CHECKING_REBOOT -> VERIFYING
+Sep 08 14:31:23 patchcycle-test d3v-patchcycle-resume[588]: INFO state VERIFYING -> HEALTH_CHECKING
+Sep 08 14:31:23 patchcycle-test d3v-patchcycle-resume[588]: INFO state HEALTH_CHECKING -> NOTIFYING
+Sep 08 14:31:23 patchcycle-test d3v-patchcycle-resume[588]: INFO state NOTIFYING -> COMPLETED
+Sep 08 14:31:23 patchcycle-test d3v-patchcycle-resume[588]: INFO cycle aa5dc198-aaac-4327-b6e3-63169b563fe2 completed: no_updates
+Sep 08 14:31:24 patchcycle-test systemd[1]: d3v-patchcycle-resume.service: Deactivated successfully.
+Sep 08 14:31:24 patchcycle-test systemd[1]: Finished d3v-patchcycle-resume.service - D3V PatchCycle post-boot maintenance resume.
+Sep 08 14:31:24 patchcycle-test systemd[1]: d3v-patchcycle-resume.service: Consumed 19.874s CPU time, 277.4M memory peak.

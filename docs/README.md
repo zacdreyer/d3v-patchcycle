@@ -43,9 +43,14 @@ docs/
 
 ## Current status
 
-Phases 0–7 complete; **v1.0.0-rc1** (feature-complete, pre-release). The V1.0
-release gate is one green nightly L4 VM reboot run
-(`tests/vm/reboot_harness.sh` via `.github/workflows/vm-reboot.yml`).
-Phase 8 (additional providers) is post-V1. See
-`development/implementation-plan.md` for the phase breakdown and
-`../agent-memory.md` for a token-efficient cold-start summary.
+**2026-09-08: 1.0.0rc2 is undergoing final release acceptance.** The source audit
+and remediation cover correctness, security, installation, reporting and native
+package/reboot behavior. Local unit, container and VM gates have passed; the
+latest operator/archival gate and delivery evidence are being finalized.
+
+The [production-readiness checklist](development/production-readiness.md) is the
+current work queue. [Audit evidence](development/code-audit.md) records verified
+fixes and limits; [deployment acceptance](operations/deployment-acceptance.md)
+records the staging and release steps still required for actual target hosts.
+The [implementation plan](development/implementation-plan.md) preserves history;
+[agent memory](../agent-memory.md) provides handoff context.

@@ -1,0 +1,3 @@
+81ed84e19fa1dade1a4fd99edb7e87e83985c12c2670ecd338250aac4a1f62dc  d3v_patchcycle-1.0.0rc2-py3-none-any.whl
+067be9c3589cc7a08f2fba1c82824ee2d5b1b781273e7bbf66d77cd32d31ea01  d3v_patchcycle-1.0.0rc2.tar.gz
+4b8bc1cbc737386a9a9697cd550e6d7afa375c22e68e26fe81fd0709be89bc17  d3v-patchcycle-1.0.0rc2-portable.zip

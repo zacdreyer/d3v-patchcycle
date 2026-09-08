@@ -17,7 +17,7 @@ def hook_cfg(**overrides) -> HooksConfig:
 
 
 def py_hook(code: str) -> tuple[str, ...]:
-    return (sys.executable, "-c", code)
+    return (str(Path(sys.executable).resolve()), "-c", code)
 
 
 class TestExecution:
@@ -27,7 +27,7 @@ class TestExecution:
         assert len(results) == 1
         assert results[0].ok is True
         assert results[0].exit_code == 0
-        assert results[0].hook == sys.executable
+        assert results[0].hook == str(Path(sys.executable).resolve())
 
     def test_failing_hook_captured(self):
         runner = HookRunner(hook_cfg())

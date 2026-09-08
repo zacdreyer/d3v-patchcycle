@@ -15,3 +15,4 @@ accepted; superseding decisions get a new ADR that references the old one.
 | [0007](0007-notification-architecture.md) | SMTP + generic webhook in V1; delivery failure ≠ cycle failure | Accepted |
 | [0008](0008-boot-id-reboot-verification.md) | boot-id comparison + always-on resume unit | Accepted |
 | [0009](0009-dpkg-conffile-policy.md) | confdef+confold default; force flags prohibited | Accepted |
+| [0010](0010-recovery-state-schema-v2.md) | Recovery facts require schema v2 and explicit v1 migration | Accepted |

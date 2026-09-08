@@ -9,6 +9,9 @@ Hard rules enforced here:
 
 from __future__ import annotations
 
+import contextlib
+import os
+import signal
 import subprocess
 import time
 from collections.abc import Callable
@@ -66,14 +69,33 @@ def run_argv(
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        proc.terminate()
+        _terminate_tree(proc, force=False)
         try:
-            proc.communicate(timeout=10)
+            proc.communicate(timeout=120)
         except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.communicate(timeout=10)
+            _terminate_tree(proc, force=True)
+            try:
+                proc.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                # A descendant may have detached while retaining inherited pipes.
+                # Do not let pipe drainage turn a bounded command into a hang.
+                if proc.stdout:
+                    proc.stdout.close()
+                if proc.stderr:
+                    proc.stderr.close()
         raise CommandTimeout(f"command timed out after {timeout}s: {argv[0]}") from None
     return CommandResult(proc.returncode, stdout or "", stderr or "")
+
+
+def _terminate_tree(proc: subprocess.Popen[str], *, force: bool) -> None:
+    with contextlib.suppress(ProcessLookupError):
+        if os.name == "posix":
+            # getattr keeps Windows type checking compatible with POSIX-only symbols.
+            getattr(os, "killpg")(proc.pid, getattr(signal, "SIGKILL") if force else signal.SIGTERM)  # noqa: B009
+        elif force:
+            proc.kill()
+        else:
+            proc.terminate()
 
 
 def wait_for_lock_release(

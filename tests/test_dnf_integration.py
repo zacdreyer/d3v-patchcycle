@@ -18,9 +18,19 @@ from patchcycle.providers.dnf import DnfProvider
 from patchcycle.subproc import CommandResult
 
 
+class TransactionRunner(FakeRunner):
+    """Successful upgrade changes subsequent discovery results."""
+
+    def __call__(self, argv, **kwargs):
+        result = super().__call__(argv, **kwargs)
+        if result.exit_code == 0 and "upgrade" in argv:
+            self.results["check-update"] = CommandResult(0, "", "")
+        return result
+
+
 @pytest.fixture()
 def dnf(tmp_path, fake_dnf_bin):
-    runner = FakeRunner(
+    runner = TransactionRunner(
         {
             ("--version",): CommandResult(0, "4.14.0\n", ""),
             ("check",): CommandResult(0, "", ""),
@@ -74,7 +84,7 @@ class TestFullCycleThroughDnf:
         assert not any("upgrade" in c for c in calls)
 
     def test_reboot_cycle_with_kernel(self, tmp_path, fake_dnf_bin):
-        runner = FakeRunner(
+        runner = TransactionRunner(
             {
                 ("--version",): CommandResult(0, "4.14.0\n", ""),
                 ("check",): CommandResult(0, "", ""),
@@ -92,7 +102,9 @@ class TestFullCycleThroughDnf:
             search_paths=(str(fake_dnf_bin),),
             state_root=tmp_path,
         )
-        engine, store, env = make_engine(tmp_path, provider)
+        engine, store, env = make_engine(
+            tmp_path, provider, config_text='[reboot]\nexisting_pending = "continue_then_reboot"'
+        )
 
         original_reboot = env.reboot
 

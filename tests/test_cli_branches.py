@@ -48,7 +48,8 @@ class TestConfigCheckDetails:
         out = capsys.readouterr().out
         assert "warning:" in out
         assert "email -> a@b.c" in out
-        assert "webhook -> http://127.0.0.1:9000/hook" in out
+        assert "webhook (configured)" in out
+        assert "/hook" not in out
 
     def test_health_command_paths_validated(self, tmp_path, capsys):
         config, _ = write_config(

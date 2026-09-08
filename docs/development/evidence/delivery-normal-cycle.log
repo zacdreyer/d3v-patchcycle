@@ -1,0 +1,25 @@
+Sep 08 21:22:10 patchcycle-test systemd[1]: /etc/systemd/system/d3v-patchcycle.service:4: ConditionPathExists= path is not absolute, ignoring: "/etc/d3v-patchcycle/config.toml"
+Sep 08 21:22:12 patchcycle-test systemd[1]: /etc/systemd/system/d3v-patchcycle.service:4: ConditionPathExists= path is not absolute, ignoring: "/etc/d3v-patchcycle/config.toml"
+Sep 08 21:22:15 patchcycle-test systemd[1]: Starting d3v-patchcycle.service - D3V PatchCycle maintenance run...
+Sep 08 21:22:16 patchcycle-test d3v-patchcycle[2752]: INFO state IDLE -> PRECHECK
+Sep 08 21:22:16 patchcycle-test d3v-patchcycle[2752]: INFO state PRECHECK -> REFRESHING
+Sep 08 21:22:25 patchcycle-test d3v-patchcycle[2752]: INFO state REFRESHING -> DISCOVERING_UPDATES
+Sep 08 21:22:30 patchcycle-test d3v-patchcycle[2752]: INFO updates: 1 applicable, 0 held-back
+Sep 08 21:22:30 patchcycle-test d3v-patchcycle[2752]: INFO state DISCOVERING_UPDATES -> UPGRADING
+Sep 08 21:22:37 patchcycle-test d3v-patchcycle[2752]: INFO state UPGRADING -> CHECKING_REBOOT
+Sep 08 21:22:37 patchcycle-test d3v-patchcycle[2752]: INFO state CHECKING_REBOOT -> REBOOT_PENDING
+Sep 08 21:22:37 patchcycle-test d3v-patchcycle[2752]: INFO state REBOOT_PENDING -> REBOOTING
+Sep 08 21:22:37 patchcycle-test systemd[1]: d3v-patchcycle.service: Deactivated successfully.
+Sep 08 21:22:37 patchcycle-test systemd[1]: Finished d3v-patchcycle.service - D3V PatchCycle maintenance run.
+Sep 08 21:22:37 patchcycle-test systemd[1]: d3v-patchcycle.service: Consumed 22.234s CPU time, 226.6M memory peak.
+-- Boot c8ce00391ba442b3b465a5504a063634 --
+Sep 08 21:23:21 patchcycle-test systemd[1]: Starting d3v-patchcycle-resume.service - D3V PatchCycle post-boot maintenance resume...
+Sep 08 21:23:25 patchcycle-test d3v-patchcycle-resume[646]: INFO state REBOOTING -> POST_REBOOT
+Sep 08 21:23:25 patchcycle-test d3v-patchcycle-resume[646]: INFO state POST_REBOOT -> VERIFYING
+Sep 08 21:23:30 patchcycle-test d3v-patchcycle-resume[646]: INFO state VERIFYING -> HEALTH_CHECKING
+Sep 08 21:23:30 patchcycle-test d3v-patchcycle-resume[646]: INFO state HEALTH_CHECKING -> NOTIFYING
+Sep 08 21:23:30 patchcycle-test d3v-patchcycle-resume[646]: INFO state NOTIFYING -> COMPLETED
+Sep 08 21:23:30 patchcycle-test d3v-patchcycle-resume[646]: INFO cycle 911ba2fc-475d-4205-a317-80dc205c5218 completed: success
+Sep 08 21:23:30 patchcycle-test systemd[1]: d3v-patchcycle-resume.service: Deactivated successfully.
+Sep 08 21:23:30 patchcycle-test systemd[1]: Finished d3v-patchcycle-resume.service - D3V PatchCycle post-boot maintenance resume.
+Sep 08 21:23:30 patchcycle-test systemd[1]: d3v-patchcycle-resume.service: Consumed 6.361s CPU time, 88.8M memory peak.

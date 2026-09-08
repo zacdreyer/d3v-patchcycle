@@ -6,6 +6,7 @@ import http.server
 import socket
 import sys
 import threading
+from pathlib import Path
 
 from patchcycle.health import (
     _default_http_get,
@@ -81,10 +82,15 @@ class TestHttpGet:
 
 class TestRunCommand:
     def test_exit_code_and_output(self):
-        code, _ = _default_run_command((sys.executable, "-c", "pass"), 5.0)
+        code, _ = _default_run_command((str(Path(sys.executable).resolve()), "-c", "pass"), 5.0)
         assert code == 0
         code, detail = _default_run_command(
-            (sys.executable, "-c", "import sys; sys.stderr.write('bad'); sys.exit(2)"), 5.0
+            (
+                str(Path(sys.executable).resolve()),
+                "-c",
+                "import sys; sys.stderr.write('bad'); sys.exit(2)",
+            ),
+            5.0,
         )
         assert code == 2
         assert "bad" in detail

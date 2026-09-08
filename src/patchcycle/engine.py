@@ -14,6 +14,8 @@ Spec: docs/specifications/state-machine.md. Rules enforced here:
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -30,6 +32,7 @@ from patchcycle.errors import (
     StateError,
     VerificationError,
 )
+from patchcycle.logging_setup import collect_config_secrets, redact_text
 from patchcycle.models import (
     ErrorInfo,
     HealthResult,
@@ -70,7 +73,7 @@ class CycleEngine:
     now_iso: Callable[[], str]
     now_local: Callable[[], datetime]
     sleeper: Callable[[float], None]
-    logger: logging.Logger
+    logger: logging.Logger | logging.LoggerAdapter[logging.Logger]
 
     # ------------------------------------------------------------------ run
 
@@ -91,6 +94,9 @@ class CycleEngine:
         if existing is not None and existing.state not in (State.COMPLETED, State.FAILED):
             return self._recover_same_boot(existing)
 
+        if existing is not None:
+            self.store.archive(existing)
+
         return self._drive(self._new_cycle())
 
     def resume(self) -> int:
@@ -104,22 +110,19 @@ class CycleEngine:
             self.logger.info("no maintenance cycle pending; nothing to resume")
             return 0
         if cycle.state in (State.COMPLETED, State.FAILED):
+            self.store.archive(cycle)
             return 0
+        if self._is_stale(cycle):
+            return self._diagnose_and_fail(cycle, "stale-cycle")
+
+        if cycle.boot_id_after:
+            return self._recover_same_boot(cycle)
 
         target = resume_target(cycle.state, boot_changed=self._boot_changed(cycle))
         if target is None:
             if cycle.state is State.REBOOTING:
                 return self._reboot_never_happened(cycle)
-            return self._fail(
-                cycle,
-                PatchCycleError(
-                    f"unexpected reboot during {cycle.state} (FR-S6); package state "
-                    "was verified read-only, administrator must review before rerun"
-                ),
-                stage=cycle.state.value,
-                kind="unexpected-reboot",
-                outcome=Outcome.FAILED,
-            )
+            return self._diagnose_and_fail(cycle, "unexpected-reboot")
         return self._drive(cycle, start_at=target)
 
     # ------------------------------------------------------------- dry run
@@ -129,9 +132,20 @@ class CycleEngine:
         from patchcycle.hooks import classify_hooks
 
         pre = self.provider.preflight()
+        if not pre.ok:
+            raise PreflightError(pre.detail or pre.kind, kind=pre.kind or None)
         refresh = self.provider.refresh()
+        if not refresh.ok:
+            raise PackageManagerError(refresh.detail or "index refresh failed")
         updates = self.provider.list_updates(self.config.updates.strategy)
         reboot = self.provider.reboot_required()
+        pending = sum(not update.held for update in updates)
+        estimates = self.config.maintenance.estimates
+        estimated_duration = estimates.refresh_s
+        if pending:
+            estimated_duration += max(estimates.upgrade_min_s, estimates.per_package_s * pending)
+        if reboot.required or self.config.reboot.policy == "always":
+            estimated_duration += estimates.reboot_verify_s
         return {
             "provider": self.provider.name,
             "os": self.provider.os_identity.pretty_name,
@@ -140,6 +154,7 @@ class CycleEngine:
             "refresh_ok": refresh.ok,
             "updates": [u.__dict__ for u in updates],
             "packages_pending": len([u for u in updates if not u.held]),
+            "estimated_duration_s": estimated_duration,
             "reboot_required": reboot.required,
             "reboot_reasons": list(reboot.reasons),
             "strategy": self.config.updates.strategy,
@@ -168,12 +183,19 @@ class CycleEngine:
         return cycle
 
     def _drive(self, cycle: CycleState, start_at: State | None = None) -> int:
+        self._log_context(cycle)
         state = start_at or (State.PRECHECK if cycle.state is State.IDLE else cycle.state)
         if cycle.state is State.IDLE or state != cycle.state:
             cycle = self._transition(cycle, state)
         try:
             while cycle.state not in (State.COMPLETED, State.FAILED):
+                previous_state = cycle.state
+                self._log_context(cycle)
                 cycle = self._step(cycle)
+                if previous_state is State.REBOOTING and cycle.state is State.REBOOTING:
+                    # systemctl queues shutdown asynchronously. Leave the durable
+                    # cycle pending; only a subsequent boot may verify it.
+                    return 0
         except PatchCycleError as exc:
             return self._fail(cycle, exc, stage=cycle.state.value)
         except Exception as exc:  # defensive: unexpected internal error
@@ -201,6 +223,7 @@ class CycleEngine:
     def _do_precheck(self, cycle: CycleState) -> CycleState:
         if not self.is_root():
             raise PreflightError("PatchCycle must run as root")
+        self._check_disk_space()
         os_id: OsIdentity = self.provider.os_identity
         cycle = replace(
             cycle,
@@ -218,12 +241,43 @@ class CycleEngine:
             boot_id_before=self.reboot.boot_id_reader(),
         )
         pre = self._preflight_with_lock_wait()
+        if (
+            not pre.ok
+            and pre.kind == "interrupted-transaction"
+            and self.config.updates.repair_interrupted
+        ):
+            if not self._window().allows_disruptive(
+                self.now_local(), self._upgrade_estimate(cycle)
+            ):
+                raise PreflightError(
+                    "insufficient maintenance window for interrupted-transaction repair"
+                )
+            pre = self.provider.repair_interrupted()
         cycle = replace(cycle, pre_existing_reboot=pre.pre_existing_reboot)
         if not pre.ok:
             if pre.kind == "pm-locked":
                 raise PackageManagerLockedError(pre.detail or "package manager locked")
             raise PreflightError(pre.detail or pre.kind, kind=pre.kind or None)
+        if (
+            pre.pre_existing_reboot
+            and not cycle.initial_reboot_completed
+            and self.config.reboot.existing_pending == "reboot_first"
+        ):
+            cycle = replace(cycle, reboot_before_updates=True, reboot_required=True)
+            return self._transition(cycle, State.REBOOT_PENDING)
         return self._transition(cycle, State.REFRESHING)
+
+    @staticmethod
+    def _check_disk_space() -> None:
+        targets = [("/", 512 * 1024 * 1024)]
+        if os.path.ismount("/boot"):
+            targets.append(("/boot", 128 * 1024 * 1024))
+        for path, required in targets:
+            if shutil.disk_usage(path).free < required:
+                raise PreflightError(
+                    f"insufficient free disk space on {path}: need {required} bytes",
+                    kind="disk-space",
+                )
 
     def _preflight_with_lock_wait(self) -> PreflightResult:
         deadline = self.config.package_manager.lock_timeout_s
@@ -245,6 +299,14 @@ class CycleEngine:
             raise PackageManagerError(f"index refresh failed: {result.detail}")
         for warning in result.warnings:
             self.logger.warning("refresh warning: %s", warning)
+        cycle = replace(
+            cycle,
+            warnings=tuple(
+                dict.fromkeys(
+                    (*cycle.warnings, *(self._redact(warning) for warning in result.warnings))
+                )
+            ),
+        )
         return self._transition(cycle, State.DISCOVERING_UPDATES)
 
     def _do_discovering(self, cycle: CycleState) -> CycleState:
@@ -253,7 +315,7 @@ class CycleEngine:
         held = [u for u in updates if u.held]
         cycle = replace(
             cycle,
-            updates_available=tuple(u.__dict__ for u in applicable),
+            updates_available=tuple(u.__dict__ for u in updates),
             packages_pending=len(applicable),
         )
         self.logger.info("updates: %d applicable, %d held-back", len(applicable), len(held))
@@ -274,9 +336,20 @@ class CycleEngine:
                 f"(estimated {estimate}s); cycle deferred to next window"
             )
         self._run_hooks(cycle, "before_upgrade", self.config.hooks.before_upgrade)
+        pre = self._preflight_with_lock_wait()
+        if not pre.ok:
+            if pre.kind == "pm-locked":
+                raise PackageManagerLockedError(pre.detail)
+            raise PreflightError(pre.detail or pre.kind, kind=pre.kind or None)
+        if not self._window().allows_disruptive(self.now_local(), estimate):
+            raise PreflightError("maintenance window expired while preparing the upgrade")
         result = self.provider.apply_updates(
             self.config.updates.strategy,
-            [self._update_from_dict(u) for u in cycle.updates_available],
+            [
+                self._update_from_dict(u)
+                for u in cycle.updates_available
+                if not u.get("held", False)
+            ],
         )
         if not result.ok:
             raise PackageManagerError(f"package manager failure: {result.detail}")
@@ -287,6 +360,7 @@ class CycleEngine:
             kernel_update=result.kernel_update,
             expected_kernel=result.expected_kernel,
         )
+        self.store.save(cycle)
         self._run_hooks(cycle, "after_upgrade", self.config.hooks.after_upgrade)
         return self._transition(cycle, State.CHECKING_REBOOT)
 
@@ -321,17 +395,36 @@ class CycleEngine:
 
     def _do_rebooting(self, cycle: CycleState) -> CycleState:
         self._run_hooks(cycle, "before_reboot", self.config.hooks.before_reboot)
-        cycle = self.reboot.prepare_and_reboot(cycle, now_iso=self.now_iso)
+        decision = self.reboot.evaluate(
+            reboot_required=cycle.reboot_required,
+            estimate_s=self.config.maintenance.estimates.reboot_verify_s,
+        )
+        if decision.action is not RebootAction.REBOOT:
+            raise PreflightError(f"reboot blocked before command: {decision.reason}")
+        cycle = self.reboot.prepare_and_reboot(cycle, now_iso=self.now_iso, persist=self.store.save)
         # Production: the machine goes down here and the resume service
         # continues. Tests/simulation: rebooter returns after flipping the
         # boot id, and we continue in-process through the same code path.
-        self.store.save(cycle)
+        if not self._boot_changed(cycle):
+            return cycle
         return self._transition(cycle, State.POST_REBOOT)
 
     def _do_post_reboot(self, cycle: CycleState) -> CycleState:
-        self.reboot.verify_rebooted(cycle)
-        cycle = replace(cycle, kernel_after=self.reboot.kernel_reader())
+        boot_after = self.reboot.verify_rebooted(cycle)
+        cycle = replace(cycle, kernel_after=self.reboot.kernel_reader(), boot_id_after=boot_after)
+        self.store.save(cycle)
         self._run_hooks(cycle, "after_reboot", self.config.hooks.after_reboot)
+        if cycle.reboot_before_updates:
+            cycle = replace(
+                cycle,
+                reboot_before_updates=False,
+                initial_reboot_completed=True,
+                boot_id_before=self.reboot.boot_id_reader(),
+                boot_id_after=None,
+                reboot_attempts=0,
+                reboot_initiated_at=None,
+            )
+            return self._transition(cycle, State.PRECHECK)
         return self._transition(cycle, State.VERIFYING)
 
     def _do_verifying(self, cycle: CycleState) -> CycleState:
@@ -341,12 +434,18 @@ class CycleEngine:
             verify_passed=result.consistent and result.outstanding == 0,
             outstanding_updates=result.outstanding,
         )
+        self.store.save(cycle)
         if not result.consistent:
             raise VerificationError(f"package state inconsistent: {result.detail}")
+        if result.outstanding:
+            raise VerificationError(f"{result.outstanding} applicable updates remain")
         return self._transition(cycle, State.HEALTH_CHECKING)
 
     def _do_health_checking(self, cycle: CycleState) -> CycleState:
-        results = self.health.run(self.config.health_checks)
+        results = [
+            replace(result, detail=self._redact(result.detail), name=self._redact(result.name))
+            for result in self.health.run(self.config.health_checks)
+        ]
         cycle = replace(
             cycle,
             health_results=tuple(r.__dict__ for r in results),
@@ -366,17 +465,35 @@ class CycleEngine:
         return self._transition(cycle, State.NOTIFYING)
 
     def _do_notifying(self, cycle: CycleState) -> CycleState:
+        cycle = replace(cycle, outcome=self._final_outcome(cycle).value)
+        self.store.save(cycle)
         report = self._build_report(cycle)
         body = render_report(report)
-        status: dict[str, str] = {}
+        self.store.save_report(cycle.run_id, body)
+        status: dict[str, str] = dict(cycle.notification_status)
         for notifier in self.notifiers:
+            if status.get(notifier.name) == "sent":
+                continue
             status[notifier.name] = self._deliver_with_retries(notifier, report, body)
+            cycle = replace(cycle, notification_status=dict(status))
+            self.store.save(cycle)
         cycle = replace(cycle, notification_status=status)
+        self.store.save_report(cycle.run_id, render_report(self._build_report(cycle)))
         return self._transition(cycle, State.COMPLETED)
 
     # ----------------------------------------------------------- helpers
 
+    def _redact(self, value: str) -> str:
+        return redact_text(value, collect_config_secrets(self.config))
+
+    def _log_context(self, cycle: CycleState) -> None:
+        base = self.logger.logger if isinstance(self.logger, logging.LoggerAdapter) else self.logger
+        self.logger = logging.LoggerAdapter(
+            base, {"run_id": cycle.run_id, "state": cycle.state.value}
+        )
+
     def _transition(self, cycle: CycleState, dst: State) -> CycleState:
+        self._log_context(cycle)
         if not is_legal_transition(cycle.state, dst):
             raise StateError(f"illegal transition {cycle.state} -> {dst}")
         self.logger.info("state %s -> %s", cycle.state.value, dst.value)
@@ -396,11 +513,16 @@ class CycleEngine:
     ) -> int:
         error = ErrorInfo(
             kind=kind or exc.error_kind,
-            message=str(exc),
+            message=self._redact(str(exc)),
             stage=stage,
             manual_intervention=exc.manual_intervention,
         )
         self.logger.error("cycle failed at %s: %s", stage, error.message)
+        # A handler may have persisted completed work before a later action
+        # failed. Preserve those facts rather than archiving its stale input.
+        saved = self.store.load()
+        if saved is not None and saved.run_id == cycle.run_id:
+            cycle = saved
         if is_legal_transition(cycle.state, State.FAILED):
             cycle = self._transition(cycle, State.FAILED)
         else:
@@ -411,23 +533,22 @@ class CycleEngine:
         )
         cycle = replace(cycle, error=error.__dict__, outcome=final_outcome.value)
         self.store.save(cycle)
-        self._run_hooks(cycle, "on_failure", self.config.hooks.on_failure)
+        try:
+            self._run_hooks(cycle, "on_failure", self.config.hooks.on_failure)
+        except Exception:
+            self.logger.error("on_failure hook failed; preserving original cycle failure")
         cycle = self._notify_best_effort(cycle)
         self.store.archive(cycle)
         return exc.exit_code
 
     def _recover_same_boot(self, cycle: CycleState) -> int:
         """Crash recovery for a non-terminal cycle found by run() (FR-S1/S2)."""
+        if self._is_stale(cycle):
+            return self._diagnose_and_fail(cycle, "stale-cycle")
         if self._boot_changed(cycle):
-            return self._fail(
-                cycle,
-                PatchCycleError(
-                    f"unexpected reboot during {cycle.state} (FR-S6); refusing to "
-                    "blindly continue an interrupted cycle"
-                ),
-                stage=cycle.state.value,
-                kind="unexpected-reboot",
-            )
+            if cycle.state in (State.REBOOTING, State.POST_REBOOT) and not cycle.boot_id_after:
+                return self._drive(cycle, start_at=State.POST_REBOOT)
+            return self._diagnose_and_fail(cycle, "unexpected-reboot")
         if cycle.state is State.REBOOTING:
             return self._reboot_never_happened(cycle)
         if cycle.state in (
@@ -448,11 +569,45 @@ class CycleEngine:
         )
         return self._drive(cycle, start_at=State.PRECHECK)
 
+    def _is_stale(self, cycle: CycleState) -> bool:
+        timestamp = cycle.updated_at or cycle.started_at
+        if not timestamp:
+            return False
+        try:
+            elapsed = datetime.fromisoformat(self.now_iso()) - datetime.fromisoformat(timestamp)
+            return elapsed.total_seconds() > 7 * 86400
+        except (TypeError, ValueError):
+            return True
+
+    def _diagnose_and_fail(self, cycle: CycleState, kind: str) -> int:
+        details = []
+        for diagnostic in (self.provider.preflight, self.provider.verify):
+            try:
+                details.append(str(diagnostic()))
+            except Exception as exc:
+                details.append(f"diagnostic failed: {type(exc).__name__}")
+        return self._fail(
+            cycle,
+            PatchCycleError(
+                f"{kind} during {cycle.state}; read-only diagnostics: {'; '.join(details)}"
+            ),
+            stage=cycle.state.value,
+            kind=kind,
+        )
+
     def _reboot_never_happened(self, cycle: CycleState) -> int:
-        if cycle.reboot_attempts < self.reboot.max_attempts:
+        try:
+            elapsed = (
+                datetime.fromisoformat(self.now_iso())
+                - datetime.fromisoformat(cycle.reboot_initiated_at or self.now_iso())
+            ).total_seconds()
+        except (TypeError, ValueError):
+            elapsed = 600
+        if cycle.reboot_attempts < self.reboot.max_attempts and elapsed < 600:
             self.logger.warning(
                 "reboot attempt %d did not take effect; retrying", cycle.reboot_attempts
             )
+            self.sleeper(max(0, 30 - elapsed))
             return self._drive(cycle, start_at=State.REBOOTING)
         return self._fail(
             cycle,
@@ -467,7 +622,7 @@ class CycleEngine:
         # boot_id_before is recorded at cycle start (PRECHECK) and re-recorded
         # before rebooting; a mismatch means the machine rebooted outside the
         # expected window (FR-S6) or the ordered reboot happened (ADR-0008).
-        baseline = cycle.boot_id_before
+        baseline = cycle.boot_id_after or cycle.boot_id_before
         if baseline is None:
             return False
         return self.reboot.boot_id_reader() != baseline
@@ -491,7 +646,10 @@ class CycleEngine:
 
     def _deliver_with_retries(self, notifier: Notifier, report: ReportData, body: str) -> str:
         for attempt, delay in enumerate((5.0, 30.0, 120.0), start=1):
-            result = notifier.deliver(report, body)
+            try:
+                result = notifier.deliver(report, body)
+            except Exception as exc:
+                result = f"failed:{type(exc).__name__}"
             if result == "sent":
                 return result
             self.logger.warning("notifier %s attempt %d failed: %s", notifier.name, attempt, result)
@@ -501,19 +659,19 @@ class CycleEngine:
 
     def _notify_best_effort(self, cycle: CycleState) -> CycleState:
         """Notify on failure; never raises. Returns the updated cycle."""
-        if not self.notifiers:
-            return cycle
         report = self._build_report(cycle)
         body = render_report(report)
+        self.store.save_report(cycle.run_id, body)
         status: dict[str, str] = dict(cycle.notification_status)
         for notifier in self.notifiers:
             try:
                 status[notifier.name] = self._deliver_with_retries(notifier, report, body)
             except Exception as exc:  # notification must never crash a failure path
-                self.logger.error("notifier %s raised: %s", notifier.name, exc)
-                status[notifier.name] = f"failed:{exc}"
+                self.logger.error("notifier %s raised: %s", notifier.name, type(exc).__name__)
+                status[notifier.name] = f"failed:{type(exc).__name__}"
         cycle = replace(cycle, notification_status=status)
         self.store.save(cycle)
+        self.store.save_report(cycle.run_id, render_report(self._build_report(cycle)))
         return cycle
 
     def _build_report(self, cycle: CycleState) -> ReportData:
@@ -528,18 +686,18 @@ class CycleEngine:
             outcome=Outcome(cycle.outcome) if cycle.outcome else Outcome.FAILED,
             packages_available=cycle.packages_pending,
             packages_upgraded=cycle.packages_updated,
-            packages_held=0,
+            packages_held=sum(bool(u.get("held", False)) for u in cycle.updates_available),
             kernel_update=cycle.kernel_update,
             reboot_required=cycle.reboot_required,
-            reboot_completed=cycle.kernel_after is not None
-            or (cycle.boot_id_before is not None and cycle.state in (State.COMPLETED,)),
+            reboot_completed=cycle.kernel_after is not None,
             kernel_before=cycle.kernel_before,
             kernel_after=cycle.kernel_after or "",
-            outstanding_updates=cycle.outstanding_updates or 0,
+            outstanding_updates=cycle.outstanding_updates,
             health_results=health,
             failed_services=sum(1 for r in health if not r.ok and r.kind == "service"),
             error=error,
             notification_status=cycle.notification_status,
+            warnings=cycle.warnings,
         )
 
     def _final_outcome(self, cycle: CycleState) -> Outcome:
@@ -547,7 +705,7 @@ class CycleEngine:
             return Outcome.FAILED
         if cycle.outcome == Outcome.MANUAL_REBOOT_REQUIRED.value:
             return Outcome.MANUAL_REBOOT_REQUIRED
-        if any(v.startswith("failed") for v in cycle.notification_status.values()):
+        if cycle.warnings or any(not r.get("ok", False) for r in cycle.health_results):
             return Outcome.SUCCESS_WITH_WARNINGS
         if not cycle.updates_applied and cycle.packages_pending == 0:
             return Outcome.NO_UPDATES

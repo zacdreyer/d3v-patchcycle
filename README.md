@@ -1,5 +1,10 @@
 # d3v-patchcycle
 
+> **Release candidate 1.0.0rc2 (2026-09-08): local acceptance passed.**
+> Audit fixes, seven-distribution integration tests and normal/power-loss VM
+> recovery are verified. Stable approval requires final-commit CI and target-host
+> staging. Follow the [readiness checklist](docs/development/production-readiness.md).
+
 D3V PatchCycle is a lightweight, stateful server maintenance utility that
 automates unattended OS/package updates, safely handles required reboots,
 resumes maintenance after restart, verifies system health, and reports the
@@ -11,12 +16,9 @@ final result to an administrator.
 
 ## ⚠️ Under active development
 
-**D3V PatchCycle is pre-release software (v1.0.0-rc1).** The codebase is
-feature-complete and heavily tested (390+ tests, ~92% branch coverage, mypy
-`--strict` + ruff clean, T1–T14 security sweep), but a stable release is only
-cut after the full gated pipeline passes — including a **real VM reboot**
-end-to-end run (the release pipeline refuses to publish unless it passes).
-Treat rc1 as a release candidate: test it on non-production systems first.
+**D3V PatchCycle is pre-release software (1.0.0rc2 working tree).** Production-readiness
+work now takes priority over additional features. Test only on non-production
+systems until release and deployment acceptance gates close.
 
 ## What it does
 
@@ -32,16 +34,18 @@ Treat rc1 as a release candidate: test it on non-production systems first.
 10. Reports the result by email/webhook; delivery failure never rewrites the
     maintenance outcome.
 11. Recovers conservatively from crashes, power loss, and unexpected reboots —
-    never kills package managers, never deletes lock files, never forces.
+    never kills lock holders, never deletes lock files, never forces repairs.
 
 ## Supported platforms
 
 | Family | Platforms | Provider |
 |---|---|---|
 | Debian | Ubuntu Server 22.04/24.04 LTS, Debian 12/13 | APT |
-| RHEL | RHEL 9, Rocky Linux 9, AlmaLinux 9, Fedora 41 | DNF |
+| RPM | Rocky Linux 9, AlmaLinux 9, Fedora 44 | DNF |
 
-All targets are systemd-based. Other operating systems are detected and fail
+The release validation targets x86_64 systemd hosts on these versions. RHEL,
+CentOS, unlisted versions and ID_LIKE derivatives are not release-supported.
+Other operating systems are detected and fail
 safely (`Unsupported operating system: …; no maintenance actions were
 performed`) — support is only claimed for providers with passing integration
 tests. Zypper (SUSE/openSUSE), APK (Alpine), Pacman (Arch), and macOS are
@@ -57,21 +61,33 @@ planned (Phase 8 remainder).
 - **Python 3.11+** (`python3 --version`)
 - root (PatchCycle manages packages and reboots)
 
+Ubuntu 22.04 ships Python 3.10 and requires a separately provisioned Python
+3.11+ interpreter approved for your environment. Rocky/AlmaLinux 9 can install
+`python3.11` and `python3.11-pip` from their repositories. On those hosts, use
+`python3.11 -m venv` in place of `python3 -m venv` below. Ubuntu 24.04,
+Debian 12/13 and Fedora 44 have a suitable distribution Python; ensure its
+venv support is installed. Do not replace the distribution's system Python.
+
 ### Option A — pip (recommended)
 
 ```bash
 # From a downloaded release wheel/zip on this repo's Releases page:
-sudo python3 -m pip install ./d3v_patchcycle-1.0.0rc1-py3-none-any.whl
+python3 -c 'import sys; assert sys.version_info >= (3, 11), "Python 3.11+ required"'
+sudo python3 -m venv /opt/d3v-patchcycle/venv
+sudo /opt/d3v-patchcycle/venv/bin/pip install ./d3v_patchcycle-1.0.0rc2-py3-none-any.whl
+sudo ln -s /opt/d3v-patchcycle/venv/bin/d3v-patchcycle /usr/local/bin/d3v-patchcycle
 
-# (Once published to PyPI: sudo python3 -m pip install d3v-patchcycle)
+# Install into this dedicated environment; distribution Python may be externally managed.
 ```
 
 ### Option B — from source
 
 ```bash
-git clone https://github.com/<org>/d3v-patchcycle.git
+git clone https://github.com/zacdreyer/d3v-patchcycle.git
 cd d3v-patchcycle
-sudo python3 -m pip install .
+sudo python3 -m venv /opt/d3v-patchcycle/venv
+sudo /opt/d3v-patchcycle/venv/bin/pip install .
+sudo ln -s /opt/d3v-patchcycle/venv/bin/d3v-patchcycle /usr/local/bin/d3v-patchcycle
 ```
 
 ### Install host integration (systemd units + config + state dirs)
@@ -95,9 +111,9 @@ This is idempotent and safe to re-run. It:
 Verify:
 
 ```bash
-d3v-patchcycle config-check   # validate configuration
+sudo d3v-patchcycle config-check   # root-owned 0600 configuration
 d3v-patchcycle detect         # confirm OS + provider support
-d3v-patchcycle run --dry-run  # see the full plan, change nothing
+sudo d3v-patchcycle run --dry-run  # refresh metadata and plan; no package changes
 ```
 
 ---
@@ -307,7 +323,7 @@ Full detail: [docs/](docs/README.md).
 
 ## Development roadmap
 
-Built with Spec-Driven Development + strict TDD. Phases 0–7 complete
+Built with Spec-Driven Development + strict TDD. Phases 0–7 previously recorded complete
 (`v1.0.0-rc1`); Phase 8 in progress (DNF ✅; Zypper/APK/Pacman/macOS planned).
 See the [implementation plan](docs/development/implementation-plan.md).
 

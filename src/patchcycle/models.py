@@ -50,6 +50,7 @@ class UpdateInfo:
     security: bool = False
     held: bool = False
     requires_reboot_hint: bool = False
+    arch: str = ""
 
 
 @dataclass(frozen=True)
@@ -140,7 +141,7 @@ class ReportData:
     reboot_completed: bool = False
     kernel_before: str = ""
     kernel_after: str = ""
-    outstanding_updates: int = 0
+    outstanding_updates: int | None = None
     health_results: tuple[HealthResult, ...] = ()
     failed_services: int = 0
     error: ErrorInfo | None = None

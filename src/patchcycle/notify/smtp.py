@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import smtplib
+import ssl
 from email.message import EmailMessage
 
 from patchcycle.config import EmailConfig
@@ -35,7 +36,7 @@ class SmtpNotifier(Notifier):
         try:
             smtp = smtplib.SMTP(cfg.smtp_host, cfg.smtp_port, timeout=30)
             if cfg.smtp_starttls:
-                smtp.starttls()
+                smtp.starttls(context=ssl.create_default_context())
             password = ""
             if cfg.smtp_password_env:
                 password = os.environ.get(cfg.smtp_password_env, "")
@@ -46,7 +47,7 @@ class SmtpNotifier(Notifier):
             smtp.send_message(msg)
         except (OSError, smtplib.SMTPException) as exc:
             # Never include credentials or message content in the failure text.
-            return f"failed:{type(exc).__name__}: {exc}"
+            return f"failed:{type(exc).__name__}"
         finally:
             if smtp is not None:
                 try:

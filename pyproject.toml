@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "d3v-patchcycle"
-version = "1.0.0rc1"
+version = "1.0.0rc2"
 description = "Stateful, reboot-safe server maintenance utility"
 readme = "README.md"
 requires-python = ">=3.11"

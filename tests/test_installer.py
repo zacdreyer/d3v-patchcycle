@@ -50,12 +50,12 @@ class TestUnitRendering:
         c = cfg()
         unit = render_service(c, executable="/opt/d3v-patchcycle/bin/d3v-patchcycle")
         assert "Type=oneshot" in unit
-        assert "ExecStart=/opt/d3v-patchcycle/bin/d3v-patchcycle run --scheduled" in unit
+        assert 'ExecStart="/opt/d3v-patchcycle/bin/d3v-patchcycle" run --scheduled' in unit
         for directive in (
             "NoNewPrivileges=true",
             "PrivateTmp=true",
             "ProtectHome=true",
-            "RestrictSUIDSGID=true",
+            "RestrictSUIDSGID=false",
             "EnvironmentFile=-/etc/d3v-patchcycle/environment",
         ):
             assert directive in unit
@@ -63,7 +63,7 @@ class TestUnitRendering:
     def test_resume_service_unit(self):
         unit = render_resume_service(executable="/opt/d3v-patchcycle/bin/d3v-patchcycle")
         assert "Type=oneshot" in unit
-        assert "ExecStart=/opt/d3v-patchcycle/bin/d3v-patchcycle resume" in unit
+        assert 'ExecStart="/opt/d3v-patchcycle/bin/d3v-patchcycle" resume' in unit
         assert "WantedBy=multi-user.target" in unit
 
     def test_units_do_not_reference_cron(self):

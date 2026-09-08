@@ -5,6 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Prepare 1.0.0rc2 with schema-2 recovery state and explicit v1 migration.
+- Limit built-in support to tested x86_64/systemd Ubuntu 22.04/24.04, Debian
+  12/13, Rocky/AlmaLinux 9 and Fedora 44; refuse unlisted derivatives/versions.
+
+### Fixed
+
+- Persist reboot facts and bounded retries before issuing reboot; wait for boot-ID proof.
+- Enforce reboot-first, user wait, stuck-reboot, stale-cycle and corruption recovery safeguards.
+- Correct final notification outcomes, durable text reports, health aggregation and verification.
+- Validate privileged config/state/hook/log paths and recovery schema values.
+- Verify SMTP TLS certificates and prevent webhook credential forwarding on redirects.
+- Correct APT record-lock probing, new dependencies, security origins and Debian kernel identities.
+- Repair clean installation, systemd validation/order, manual scheduling and CLI guards.
+- Terminate POSIX subprocess groups with the documented two-minute grace period.
+- Strengthen real APT upgrade tests and wheel-installed VM reboot validation.
+- Fix release artifact checksums and exclude VM disks/private keys from uploaded diagnostics.
+
+- Parse DNF5 security advisories and pin APT security candidates exactly.
+- Refuse unsafe purge contents and malformed nested recovery records.
+- Report unperformed checks truthfully and preserve archived delivery outcomes.
+
+### Documentation
+
+- Record completed source audit remediation and local acceptance evidence.
+- Added a production-readiness checklist with full audit as the first gate.
+- Record audit findings, current validation evidence and remaining release blockers.
+
 ## [1.0.0-rc1] — 2026-08-24
 
 First release candidate. Feature-complete for V1; the stable 1.0.0 tag is cut

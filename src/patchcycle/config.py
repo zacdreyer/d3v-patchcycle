@@ -13,9 +13,10 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NoReturn
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 from patchcycle.errors import ConfigError
+from patchcycle.secure_io import read_private
 
 DEFAULT_CONFIG_PATH = Path("/etc/d3v-patchcycle/config.toml")
 
@@ -52,6 +53,8 @@ def _fail(key: str, message: str, valid: list[str] | None = None) -> NoReturn:
 
 
 def _unknown_keys(key: str, table: dict[str, Any], allowed: set[str]) -> None:
+    if not isinstance(table, dict):
+        _fail(key, "expected a table")
     for k in table:
         if k not in allowed:
             close = difflib.get_close_matches(k, sorted(allowed), n=1)
@@ -296,7 +299,7 @@ def _parse_health_entry(kind: str, k: str, entry: Any) -> HealthCheckConfig:
     if kind == "http":
         _unknown_keys(k, entry, {"url", "expected_status", "timeout", "critical"})
         url = _str(f"{k}.url", entry.get("url"), "")
-        if urlparse(url).scheme not in ("http", "https"):
+        if _validated_url(f"{k}.url", url).scheme not in ("http", "https"):
             _fail(f"{k}.url", f"must be http(s), got {url!r}")
         status = _int(f"{k}.expected_status", entry.get("expected_status"), 200, 100, 599)
         return HealthCheckConfig(
@@ -305,6 +308,8 @@ def _parse_health_entry(kind: str, k: str, entry: Any) -> HealthCheckConfig:
     if kind == "tcp":
         _unknown_keys(k, entry, {"host", "port", "timeout", "critical"})
         host = _str(f"{k}.host", entry.get("host"), "")
+        if not host or "port" not in entry:
+            _fail(k, "TCP checks require a host and port")
         port = _int(f"{k}.port", entry.get("port"), 0, 1, 65535)
         return HealthCheckConfig(
             kind, critical, name=f"{host}:{port}", host=host, port=port, timeout_s=timeout
@@ -319,6 +324,8 @@ def _parse_health_entry(kind: str, k: str, entry: Any) -> HealthCheckConfig:
 
 
 def _parse_health(data: dict[str, Any]) -> tuple[HealthCheckConfig, ...]:
+    if not isinstance(data, dict):
+        _fail("health", "expected a table")
     checks: list[HealthCheckConfig] = []
     for kind, table in data.items():
         if kind not in {"service", "http", "tcp", "command"}:
@@ -332,6 +339,19 @@ def _parse_health(data: dict[str, Any]) -> tuple[HealthCheckConfig, ...]:
     return tuple(checks)
 
 
+def _validated_url(key: str, url: str) -> ParseResult:
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except ValueError:
+        _fail(key, "malformed URL")
+    if not parsed.hostname or parsed.username is not None or parsed.password is not None:
+        _fail(key, "URL requires a host and must not contain credentials")
+    if port == 0 or any(ord(c) < 33 for c in url):
+        _fail(key, "invalid URL port or whitespace")
+    return parsed
+
+
 def load_config(path: Path) -> Config:
     """Load and strictly validate a TOML config file.
 
@@ -339,7 +359,7 @@ def load_config(path: Path) -> Config:
         ConfigError: file unreadable, malformed, or failing validation.
     """
     try:
-        raw = path.read_bytes()
+        raw = read_private(path)
     except OSError as exc:
         raise ConfigError(f"config error: cannot read {path}: {exc}") from exc
     try:
@@ -396,9 +416,10 @@ def parse_config(data: dict[str, Any]) -> Config:
         if day is None:
             _fail("maintenance.day", f"invalid weekday {day_raw!r}")
     elif schedule == "monthly":
-        if not (isinstance(day_raw, int) and 1 <= day_raw <= 28) and str(day_raw) not in {
-            str(d) for d in range(1, 29)
-        }:
+        if isinstance(day_raw, bool) or (
+            not (isinstance(day_raw, int) and 1 <= day_raw <= 28)
+            and str(day_raw) not in {str(d) for d in range(1, 29)}
+        ):
             _fail("maintenance.day", f"monthly day must be 1..28, got {day_raw!r}")
         day = str(day_raw)
     else:
@@ -595,7 +616,7 @@ def _parse_notifications(data: dict[str, Any], warnings: list[str]) -> Notificat
     if webhook_enabled:
         if not url:
             _fail("notifications.webhook.url", "required when webhook.enabled = true")
-        parsed = urlparse(url)
+        parsed = _validated_url("notifications.webhook.url", url)
         loopback = parsed.hostname in ("localhost", "127.0.0.1", "::1")
         if parsed.scheme != "https" and not (parsed.scheme == "http" and loopback):
             _fail(

@@ -13,6 +13,13 @@ from patchcycle.providers.base import UpdateProvider
 
 # Registry entries are (provider_factory, supported_ids, supported_id_like).
 _REGISTRY: list[tuple[type[UpdateProvider], frozenset[str], frozenset[str]]] = []
+_RELEASE_VERSIONS = {
+    "debian": frozenset({"12", "13"}),
+    "ubuntu": frozenset({"22.04", "24.04"}),
+    "rocky": frozenset({"9"}),
+    "almalinux": frozenset({"9"}),
+    "fedora": frozenset({"44"}),
+}
 
 
 def register(
@@ -41,9 +48,21 @@ def select_provider(os_identity: OsIdentity) -> UpdateProvider:
     Raises:
         UnsupportedPlatformError: no registered provider claims this OS.
     """
-    for provider_cls, ids, id_like in _REGISTRY:
-        if os_identity.os_id in ids or id_like.intersection(os_identity.id_like):
+    for provider_cls, ids, _id_like in _REGISTRY:
+        if os_identity.os_id in ids:
+            if provider_cls in (AptProvider, DnfProvider):
+                if os_identity.arch not in ("x86_64", "amd64"):
+                    continue
+                version = os_identity.version_id
+                if os_identity.os_id in ("rocky", "almalinux"):
+                    version = version.split(".")[0]
+                if version not in _RELEASE_VERSIONS.get(os_identity.os_id, frozenset()):
+                    continue
             return provider_cls(os_identity)
+    for related_id in os_identity.id_like:
+        for provider_cls, _ids, id_like in _REGISTRY:
+            if related_id in id_like:
+                return provider_cls(os_identity)
     raise UnsupportedPlatformError(
         f"Unsupported operating system: {os_identity.pretty_name}. "
         "No maintenance actions were performed."
@@ -59,7 +78,6 @@ from patchcycle.providers.apt import AptProvider  # noqa: E402
 register(
     AptProvider,
     ids=frozenset({"debian", "ubuntu"}),
-    id_like=frozenset({"debian"}),
 )
 
 # DNF provider (Phase 8 / V1.1): RHEL family. Registered per the
@@ -68,6 +86,5 @@ from patchcycle.providers.dnf import DnfProvider  # noqa: E402
 
 register(
     DnfProvider,
-    ids=frozenset({"rhel", "rocky", "almalinux", "fedora", "centos"}),
-    id_like=frozenset({"rhel", "fedora"}),
+    ids=frozenset({"rocky", "almalinux", "fedora"}),
 )

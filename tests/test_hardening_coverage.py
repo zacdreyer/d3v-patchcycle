@@ -75,14 +75,16 @@ class TestStateStoreEdges:
         store = StateStore(tmp_path)
         store.save(CycleState(run_id="r", state=State.PRECHECK, hostname="h"))
 
-        real_read = type(store.state_file).read_bytes
+        from patchcycle import state_store
+
+        real_read = state_store.read_private
 
         def boom(self):
             if self == store.state_file:
                 raise PermissionError("denied")
             return real_read(self)
 
-        monkeypatch.setattr(type(store.state_file), "read_bytes", boom)
+        monkeypatch.setattr(state_store, "read_private", boom)
         from patchcycle.errors import StateError
 
         with pytest.raises(StateError, match="cannot read state file"):

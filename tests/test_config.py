@@ -102,6 +102,7 @@ lock_file = "/run/custom-patchcycle/lock"
 def write(tmp_path, text: str):
     path = tmp_path / "config.toml"
     path.write_text(textwrap.dedent(text))
+    path.chmod(0o600)
     return path
 
 

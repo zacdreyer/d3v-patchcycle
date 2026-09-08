@@ -34,11 +34,16 @@ Runtime dependencies remain **zero** (NFR-01).
 
 ## 3. Test layers
 
-### L1 — Unit tests (fast, no root, no real system calls)
+### L1 — Unit tests (fast, no real maintenance commands)
 
 Seam-based design: all system interaction goes through injectable
 collaborators (a `CommandRunner` protocol, filesystem paths injected, clock
 injected). Coverage targets:
+
+POSIX ownership/permission tests run as root in disposable CI runners or
+containers, using temporary files and fake package managers. Windows developer
+tests skip native POSIX cases. Hook/subprocess and local transport tests execute
+controlled helpers and loopback servers; no host package update or reboot is permitted.
 
 - OS detection: os-release fixtures for ubuntu/debian/rhel/rocky/alma/fedora/
   suse/alpine/arch/macos/freebsd/unknown; precedence rules; quoting/escapes;
@@ -71,7 +76,7 @@ injected). Coverage targets:
   `systemctl`, `loginctl` that emit recorded outputs and exit codes from a
   scenario file. The provider runs against them with the fixed-path override
   pointed at the fixture dir. This exercises real subprocess plumbing,
-  parsing, lock probing (real flock files), and exit-code handling without a
+  parsing, native POSIX record-lock probing, and exit-code handling without a
   real package manager.
 - Reboot simulation fixture: a fake `boot_id` source (injected path) that
   flips value between "pre" and "post" phases drives the full
@@ -81,11 +86,12 @@ injected). Coverage targets:
 
 Real package managers in throwaway containers:
 
-- Matrix: `ubuntu:22.04`, `ubuntu:24.04`, `debian:12`, `debian:13`.
+- Matrix: `ubuntu:22.04`, `ubuntu:24.04`, `debian:12`, `debian:13`,
+  `rockylinux:9`, `almalinux:9`, `fedora:44`.
 - Scenarios: detect → refresh → list (with a deliberately outdated index,
   assert updates found) → dry-run plan; `dpkg --audit` dirty fixture (unpack a
   .deb then interrupt via `--no-triggers` state manipulation) → preflight
-  blocks; lock contention (hold `flock /var/lib/dpkg/lock-frontend` in
+  blocks; lock contention (hold a `fcntl.lockf` record lock on `/var/lib/dpkg/lock-frontend` in
   background) → bounded wait → BLOCKED.
 - Real upgrade smoke: in a container, `apt-get install -y --reinstall` an
   older-pinned trivial package then let PatchCycle upgrade it. Runs without
@@ -96,14 +102,16 @@ Real package managers in throwaway containers:
 
 ### L4 — Systemd & reboot tests (VM, Phase 7 harness)
 
-- QEMU/KVM VM harness (debian-12 cloud image + cloud-init) scripted from CI
-  on demand/weekly (not per-PR; documented in operations):
-  1. Install PatchCycle; enable timer; run cycle with no updates → COMPLETED.
-  2. Plant reboot-required sentinel via fixture package; run cycle → real
+- QEMU/KVM VM harness (Debian 13 cloud image + cloud-init), nightly/manual
+  and release-gated, never per-PR:
+  1. Build and install the wheel, validate generated systemd units, install an
+     outdated synthetic package requiring a SUID permission change on upgrade.
+  2. Plant reboot-required sentinel; run cycle → real package upgrade → real
      reboot → resume service → POST_REBOOT → verify → notify (webhook to a
-     host-side listener) → COMPLETED. Asserts boot-id change was verified.
+     guest-local listener) → COMPLETED. Assert boot ID, package version,
+     required file permissions, healthy result and durable archive.
   3. Power-cut test: hard-kill the VM during UPGRADING; relaunch; assert
-     FR-S6/FR-S2 recovery reporting.
+     FR-S6/FR-S2 recovery reporting and no silent package repair (`POWER_CUT=1`).
 - Kernel-update path: where a real kernel update is impractical in CI, the
   `expected_kernel` verification is tested with a fabricated newer installed
   kernel entry via the L2 fake `dpkg-query`.
@@ -114,7 +122,7 @@ Real package managers in throwaway containers:
 |---|---|
 | command timeout | fake binary that sleeps past timeout |
 | PM non-zero exit | fake binary exit 100 with captured stderr |
-| lock timeout | held flock + short lock_timeout |
+| lock timeout | held native PM lock + short lock_timeout |
 | malformed PM output | fixture with garbage/empty/localized output |
 | corrupted state | truncated/bit-flipped/wrong-schema state.json |
 | process interruption | SIGKILL mid-stage between write and action |

@@ -1,0 +1,76 @@
+{
+  "boot_id_after": null,
+  "boot_id_before": "a5886a1f-f062-4b98-9c92-760ce7929cec",
+  "dry_run": false,
+  "error": null,
+  "expected_kernel": null,
+  "health_results": [],
+  "host": {
+    "hostname": "patchcycle-test"
+  },
+  "initial_reboot_completed": false,
+  "kernel_after": null,
+  "kernel_before": "6.12.107+deb13-cloud-amd64",
+  "kernel_update": false,
+  "notification_status": {},
+  "os": {
+    "arch": "x86_64",
+    "codename": "trixie",
+    "id": "debian",
+    "init": "systemd",
+    "pretty_name": "Debian GNU/Linux 13 (trixie)",
+    "version_id": "13"
+  },
+  "outcome": null,
+  "outstanding_updates": null,
+  "packages_pending": 1,
+  "packages_updated": 0,
+  "pre_existing_reboot": true,
+  "provider": "apt",
+  "reboot_attempts": 0,
+  "reboot_before_updates": false,
+  "reboot_initiated_at": null,
+  "reboot_reasons": [],
+  "reboot_required": false,
+  "run_id": "8a154872-610d-4da5-a885-da0b320d9160",
+  "schema_version": 2,
+  "started_at": "2026-09-08T21:27:32Z",
+  "state": "UPGRADING",
+  "transitions": [
+    {
+      "at": "2026-09-08T21:27:32Z",
+      "from": "IDLE",
+      "to": "PRECHECK"
+    },
+    {
+      "at": "2026-09-08T21:27:33Z",
+      "from": "PRECHECK",
+      "to": "REFRESHING"
+    },
+    {
+      "at": "2026-09-08T21:27:41Z",
+      "from": "REFRESHING",
+      "to": "DISCOVERING_UPDATES"
+    },
+    {
+      "at": "2026-09-08T21:27:46Z",
+      "from": "DISCOVERING_UPDATES",
+      "to": "UPGRADING"
+    }
+  ],
+  "updated_at": "2026-09-08T21:27:46Z",
+  "updates_applied": false,
+  "updates_available": [
+    {
+      "arch": "",
+      "held": false,
+      "name": "patchcycle-l4-fixture",
+      "requires_reboot_hint": false,
+      "security": false,
+      "version_from": "1.0",
+      "version_to": "2.0"
+    }
+  ],
+  "verify_passed": null,
+  "warnings": []
+}

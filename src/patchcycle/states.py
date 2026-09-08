@@ -35,7 +35,7 @@ _POST_REBOOT_RESUMABLE = frozenset(
 
 _TRANSITIONS: dict[State, frozenset[State]] = {
     State.IDLE: frozenset({State.PRECHECK}),
-    State.PRECHECK: frozenset({State.REFRESHING, State.FAILED}),
+    State.PRECHECK: frozenset({State.REFRESHING, State.REBOOT_PENDING, State.FAILED}),
     # Recovery arcs to PRECHECK (FR-S1/S2): a crashed early-stage cycle
     # restarts cleanly at PRECHECK with the same run_id; PRECHECK re-runs
     # provider preflight, which catches interrupted package transactions
@@ -50,7 +50,7 @@ _TRANSITIONS: dict[State, frozenset[State]] = {
     # REBOOTING -> POST_REBOOT is only ever crossed by the resume service
     # after a verified boot-id change (ADR-0008).
     State.REBOOTING: frozenset({State.POST_REBOOT, State.FAILED}),
-    State.POST_REBOOT: frozenset({State.VERIFYING, State.FAILED}),
+    State.POST_REBOOT: frozenset({State.VERIFYING, State.PRECHECK, State.FAILED}),
     State.VERIFYING: frozenset({State.HEALTH_CHECKING, State.FAILED}),
     # Health failures are reported, not hidden: always proceed to notify.
     State.HEALTH_CHECKING: frozenset({State.NOTIFYING, State.FAILED}),

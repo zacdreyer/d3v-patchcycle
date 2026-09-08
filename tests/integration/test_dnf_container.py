@@ -19,7 +19,7 @@ from .conftest import (
 MATRIX = [
     "rockylinux:9",
     "almalinux:9",
-    "fedora:41",
+    "fedora:44",
 ]
 
 pytestmark = container_marks
@@ -35,8 +35,11 @@ def test_detect_selects_dnf_provider(image):
         + "/opt/pc-venv/bin/pip install -q /work\n"
         + 'echo "== detect =="\n'
         + "/opt/pc-venv/bin/d3v-patchcycle detect\n"
-        + 'echo "== OK =="\n'
+        + "dnf install -y -q rpm-build createrepo_c dnf-plugins-core\n"
+        + "dnf install -y -q 'dnf-command(versionlock)'\n"
+        + "/opt/pc-venv/bin/python /work/tests/integration/dnf_transaction.py\n"
     )
     proc = run_in_container(image, script)
     assert proc.returncode == 0, f"{image}:\n{proc.stdout}\n{proc.stderr}"
     assert "Provider: dnf (supported)" in proc.stdout
+    assert "PASS: actual RPM fixture upgraded 1.0 -> 2.0" in proc.stdout

@@ -8,17 +8,38 @@ encoding, so one event is always exactly one line (log-injection safe).
 
 from __future__ import annotations
 
+import io
 import json
 import logging
+import os
+import re
 import sys
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from patchcycle.config import Config
+from patchcycle.secure_io import check_directory, check_file
 
 LOGGER_NAME = "patchcycle"
+
+
+def redact_text(value: str, secrets: Sequence[str]) -> str:
+    for secret in secrets:
+        if secret:
+            value = value.replace(secret, "***REDACTED***")
+    return re.sub(r"(https?://)[^\s/@]+:[^\s/@]+@", r"\1***REDACTED***@", value)
+
+
+class _PrivateFileHandler(logging.FileHandler):
+    def _open(self) -> io.TextIOWrapper[io.FileIO]:
+        fd = os.open(
+            self.baseFilename,
+            os.O_APPEND | os.O_WRONLY | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        return io.TextIOWrapper(io.FileIO(fd, mode="a"), encoding="utf-8")
 
 
 class RedactionFilter(logging.Filter):
@@ -29,11 +50,14 @@ class RedactionFilter(logging.Filter):
         self._secrets = tuple(s for s in secrets if s)
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if not self._secrets:
-            return True
-        msg = record.getMessage()
-        for secret in self._secrets:
-            msg = msg.replace(secret, "***REDACTED***")
+        msg = redact_text(record.getMessage(), self._secrets)
+        if record.exc_info:
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
+            record.exc_info = None
+        if record.exc_text:
+            record.exc_text = redact_text(record.exc_text, self._secrets)
+        if record.stack_info:
+            record.stack_info = redact_text(record.stack_info, self._secrets)
         record.msg = msg
         record.args = ()
         return True
@@ -53,6 +77,8 @@ class JsonLinesFormatter(logging.Formatter):
         }
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
+        elif record.exc_text:
+            payload["exception"] = record.exc_text
         return json.dumps(payload, ensure_ascii=True)
 
 
@@ -90,6 +116,7 @@ def configure_logging(
     logger.propagate = False
     for handler in list(logger.handlers):
         logger.removeHandler(handler)
+        handler.close()
 
     redact = RedactionFilter(secrets or [])
 
@@ -100,7 +127,10 @@ def configure_logging(
 
     if log_file is not None:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        check_directory(log_file.parent)
+        if log_file.exists() or log_file.is_symlink():
+            check_file(log_file)
+        file_handler = _PrivateFileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(JsonLinesFormatter())
         file_handler.addFilter(redact)
         logger.addHandler(file_handler)
@@ -120,9 +150,13 @@ def collect_config_secrets(cfg: Config) -> list[str]:
         value = os.environ.get(email.smtp_password_env)
         if value:
             secrets.append(value)
+    if cfg.notifications.webhook.url:
+        secrets.append(cfg.notifications.webhook.url)
     for _name, value in cfg.notifications.webhook.headers:
         if value.startswith("env:"):
             resolved = os.environ.get(value[4:])
             if resolved:
                 secrets.append(resolved)
+        elif value:
+            secrets.append(value)
     return secrets

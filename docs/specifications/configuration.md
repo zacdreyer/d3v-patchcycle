@@ -162,7 +162,7 @@ lock_file = "/run/d3v-patchcycle/lock"
 
 ### `[hooks]`
 
-- Four hook points: `before_upgrade`, `before_reboot`, `after_reboot`,
+- Five hook points: `before_upgrade`, `before_reboot`, `after_reboot`,
   `after_upgrade`, `on_failure`. Each is a list of **argv arrays**
   (TOML array of arrays) — never shell strings.
 - Validation: every hook path must be absolute, exist at config-check,
@@ -177,13 +177,14 @@ lock_file = "/run/d3v-patchcycle/lock"
 
 | Check | Keys | Semantics |
 |---|---|---|
-| `service` | `name`, `critical` | `systemctl is-active --quiet <name>` (name validated: `[a-zA-Z0-9:_.@-]+`, suffix optional) |
+| `service` | `name`, `timeout`, `critical` | Bounded `systemctl is-active --quiet <name>` (name validated: `[a-zA-Z0-9:_.@-]+`, suffix optional) |
 | `http` | `url`, `expected_status`, `timeout`, `critical` | GET via stdlib urllib; status must equal expected |
 | `tcp` | `host`, `port`, `timeout`, `critical` | connect succeeds |
 | `command` | `argv`, `timeout`, `critical` | exit 0; no shell; same path validation as hooks |
 
-Plus implicit systemd check: no failed units (`systemctl is-system-running`
-→ `running`/`degraded` detail). Health failures are reported distinctly from
+Plus implicit systemd check: parse `systemctl list-units --failed --output=json`
+with a 10-second timeout. Probe errors are failed checks, not an empty success.
+Health failures are reported distinctly from
 update failures; `critical=true` failure → cycle outcome FAILED.
 
 ### `[logging]`
@@ -191,7 +192,7 @@ update failures; `critical=true` failure → cycle outcome FAILED.
 | Key | Type | Default | Behaviour |
 |---|---|---|---|
 | `level` | enum | `info` | Python logging level |
-| `file` | path | unset | JSONL persistent log; directory created 0750 root:adm by installer |
+| `file` | path | unset | JSONL private persistent log (0600); trusted parent created on first use |
 
 ### `[paths]`
 

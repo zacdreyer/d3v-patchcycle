@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import uuid
 from pathlib import Path
 
 import pytest
@@ -62,11 +63,13 @@ _PYTHON = {
     "debian:13": "python3",
     "rockylinux:9": "python3.11",
     "almalinux:9": "python3.11",
-    "fedora:41": "python3",
+    "fedora:44": "python3",
 }
 
 
 def bootstrap_for(image: str) -> str:
+    if image.startswith("fedora:"):
+        return "dnf install -y -q python3 python3-pip"
     family = "apt" if image.startswith(("ubuntu", "debian")) else "dnf"
     if image == "ubuntu:22.04":
         return _BOOTSTRAP["apt-22.04"]
@@ -84,14 +87,40 @@ def run_in_container(
     # Copy the mounted (read-only) source to a writable location: setuptools'
     # egg_info must write build artifacts, which fails on a ro mount. Copying
     # also keeps the host working tree untouched.
-    inner = "cp -r /src /work >/dev/null 2>&1; cd /work; " + script
-    return subprocess.run(  # noqa: S603 - fixed argv, test-controlled image
-        [_DOCKER, "run", "--rm", "-v", f"{REPO}:/src:ro", image, "sh", "-c", inner],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
+    inner = (
+        "set -eu; mkdir /work; "
+        "cp -r /src/src /src/tests /src/pyproject.toml /src/README.md /src/LICENSE /work; "
+        "cd /work; " + script
     )
+    name = f"patchcycle-l3-{uuid.uuid4().hex}"
+    try:
+        return subprocess.run(  # noqa: S603 - fixed argv, test-controlled image
+            [
+                _DOCKER,
+                "run",
+                "--rm",
+                "--name",
+                name,
+                "-v",
+                f"{REPO}:/src:ro",
+                image,
+                "sh",
+                "-c",
+                inner,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    finally:
+        # A timed-out Docker client does not necessarily stop its container.
+        subprocess.run(  # noqa: S603 - only the generated disposable fixture name
+            [_DOCKER, "rm", "--force", name],
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
 
 
 container_marks = [

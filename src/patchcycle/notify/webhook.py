@@ -19,6 +19,11 @@ from patchcycle.models import ReportData
 from patchcycle.notify.base import Notifier
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
+
+
 def resolve_headers(headers: tuple[tuple[str, str], ...]) -> list[tuple[str, str]]:
     """Resolve env:-indirected header values; missing vars omit the header."""
     resolved: list[tuple[str, str]] = []
@@ -57,9 +62,8 @@ class WebhookNotifier(Notifier):
         for name, value in resolve_headers(self.config.headers):
             request.add_header(name, value)
         try:
-            with urllib.request.urlopen(  # noqa: S310 - validated Request object
-                request, timeout=self.config.timeout_s
-            ) as resp:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+            with opener.open(request, timeout=self.config.timeout_s) as resp:
                 if 200 <= resp.status < 300:
                     return "sent"
                 return f"failed:http-{resp.status}"
