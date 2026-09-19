@@ -31,7 +31,7 @@ DEBIAN = OsIdentity(
 APT_UPDATE_OK = CommandResult(0, "Reading package lists... Done\n", "")
 APT_UPDATE_PARTIAL = CommandResult(
     100,
-    "Reading package lists... Done\n",
+    "Hit:1 https://mirror.example/stable stable InRelease\nReading package lists... Done\n",
     "E: Failed to fetch https://mirror.example/broken  404  Not Found\n"
     "W: Some index files failed to download.\n",
 )
@@ -185,7 +185,7 @@ class TestPreflight:
         assert result.kind == "interrupted-transaction"
         assert "libc6" in result.detail
 
-    def test_pm_lock_probe_busy(self, tmp_path):
+    def test_pm_probe_does_not_confuse_flock_with_dpkg_record_locks(self, tmp_path):
         lock = tmp_path / "dpkg-lock-frontend"
         lock.write_text("")
         if os.name != "posix":
@@ -195,8 +195,9 @@ class TestPreflight:
         fd = os.open(lock, os.O_RDWR)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            # Same-process, but a NEW fd => conflicts on POSIX flock.
-            assert probe_lock(lock) is True
+            # flock is independent of dpkg's fcntl record lock. The separate
+            # process contention regression lives in test_readiness_providers.
+            assert probe_lock(lock) is False
         finally:
             os.close(fd)
         # After close the lock is free again.
@@ -383,7 +384,7 @@ class TestApplyUpdates:
         assert result.ok is True
         argv = runner.calls[0][0]
         assert "install" in argv and "--only-upgrade" in argv
-        assert "libssl3t64" in argv
+        assert "libssl3t64=b" in argv
 
     def test_security_with_no_security_updates_is_noop(self, tmp_path):
         from patchcycle.models import UpdateInfo

@@ -8,14 +8,19 @@ never overwritten (a ``config.toml.new`` reference is written instead).
 
 from __future__ import annotations
 
-import contextlib
+import json
 import os
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from patchcycle.config import Config, MaintenanceConfig
+from patchcycle.config import DEFAULT_CONFIG_PATH, Config, MaintenanceConfig
+from patchcycle.errors import PatchCycleError
+from patchcycle.lock import ExecutionLock
+from patchcycle.secure_io import check_directory, check_file, read_private
+from patchcycle.state_store import CycleState, StateStore
+from patchcycle.states import State
 
 UNIT_TIMER = "d3v-patchcycle.timer"
 UNIT_SERVICE = "d3v-patchcycle.service"
@@ -94,23 +99,33 @@ WantedBy=timers.target
 """
 
 
-def render_service(config: Config, executable: str) -> str:
+def _unit_arg(value: str) -> str:
+    if any(ord(c) < 32 for c in value):
+        raise ValueError("systemd arguments must not contain control characters")
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%").replace("$", "$$")
+    return f'"{escaped}"'
+
+
+def render_service(config: Config, executable: str, config_path: Path = DEFAULT_CONFIG_PATH) -> str:
     # Hardening per threat-model §5; note the documented trade-offs there.
     return f"""\
 [Unit]
 Description=D3V PatchCycle maintenance run
 Documentation=file:///etc/d3v-patchcycle/config.toml
-ConditionPathExists=/etc/d3v-patchcycle/config.toml
+ConditionPathExists={_unit_arg(config_path.as_posix())}
+Wants=network-online.target
+After=network-online.target d3v-patchcycle-resume.service
 
 [Service]
 Type=oneshot
-ExecStart={executable} run --scheduled
+TimeoutStartSec=infinity
+ExecStart={_unit_arg(executable)} run --scheduled --config {_unit_arg(config_path.as_posix())}
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
-RestrictSUIDSGID=true
+RestrictSUIDSGID=false
 EnvironmentFile=-/etc/d3v-patchcycle/environment
 StandardOutput=journal
 StandardError=journal
@@ -118,20 +133,23 @@ SyslogIdentifier=d3v-patchcycle
 """
 
 
-def render_resume_service(executable: str) -> str:
+def render_resume_service(executable: str, config_path: Path = DEFAULT_CONFIG_PATH) -> str:
     return f"""\
 [Unit]
 Description=D3V PatchCycle post-boot maintenance resume
 Documentation=file:///etc/d3v-patchcycle/config.toml
-After=multi-user.target
+Wants=network-online.target
+After=network-online.target
+Before=d3v-patchcycle.service
 
 [Service]
 Type=oneshot
-ExecStart={executable} resume
+TimeoutStartSec=infinity
+ExecStart={_unit_arg(executable)} resume --config {_unit_arg(config_path.as_posix())}
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
-RestrictSUIDSGID=true
+RestrictSUIDSGID=false
 EnvironmentFile=-/etc/d3v-patchcycle/environment
 StandardOutput=journal
 StandardError=journal
@@ -153,9 +171,15 @@ SystemdFn = Callable[..., tuple[int, str]]
 
 
 def _real_systemd(*args: str) -> tuple[int, str]:  # pragma: no cover - Linux-only (L3/L4)
+    argv = (
+        ["/usr/bin/systemd-analyze", *args[1:]]
+        if args[0] == "analyze"
+        else ["/usr/bin/systemctl", *args]
+    )
     proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
-        ["/usr/bin/systemctl", *args],
+        argv,
         shell=False,
+        env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C"},
         capture_output=True,
         text=True,
         timeout=30,
@@ -182,49 +206,65 @@ class Installer:
         self._systemd: SystemdFn = systemd or _real_systemd
         self.install_root = install_root
         self.config_dir = config_dir
+        self.config_path = config_dir / "config.toml"
         self.state_dir = state_dir or Path(config.paths.state_dir)
+        self.lock_path = (
+            Path(config.paths.lock_file) if state_dir is None else state_dir.with_suffix(".lock")
+        )
         self.unit_dir = unit_dir
         self.executable = executable
 
     # ------------------------------------------------------------- install
 
     def install(self) -> InstallResult:
-        changed: list[str] = []
+        if getattr(os, "geteuid", lambda: 0)() != 0:
+            return InstallResult(False, "installation requires root")
         try:
-            self._systemd("daemon-reload")  # presence probe as well
-        except (FileNotFoundError, OSError):
-            return InstallResult(
-                False,
-                "systemd not available: scheduling requires a systemd-based "
-                "system; no files were installed",
-            )
+            with ExecutionLock(self.lock_path):
+                self._require_idle()
+                return self._install()
+        except (OSError, ValueError, subprocess.SubprocessError, PatchCycleError) as exc:
+            return InstallResult(False, f"systemd installation failed: {exc}")
+
+    def _checked(self, *args: str) -> None:
+        code, out = self._systemd(*args)
+        if code != 0:
+            raise OSError(f"{' '.join(args)} failed: {out}")
+
+    def _install(self) -> InstallResult:
+        changed: list[str] = []
+        self._checked("daemon-reload")
 
         on_calendar = schedule_to_oncalendar(self.config.maintenance)
         if on_calendar is not None:
-            code, out = self._systemd("analyze", "calendar", on_calendar)
-            if code != 0:
-                return InstallResult(False, f"invalid OnCalendar expression: {out}")
+            self._checked("analyze", "calendar", on_calendar)
 
         self._write_config_if_missing(changed)
         self._write_state_dirs(changed)
-        self._write_unit(UNIT_SERVICE, render_service(self.config, self.executable), changed)
-        self._write_unit(UNIT_RESUME, render_resume_service(self.executable), changed)
+        self._write_unit(
+            UNIT_SERVICE, render_service(self.config, self.executable, self.config_path), changed
+        )
+        self._write_unit(
+            UNIT_RESUME, render_resume_service(self.executable, self.config_path), changed
+        )
         if on_calendar is not None:
             self._write_unit(UNIT_TIMER, render_timer(self.config, self.executable), changed)
+        elif (self.unit_dir / UNIT_TIMER).exists():
+            self._checked("disable", "--now", UNIT_TIMER)
+            (self.unit_dir / UNIT_TIMER).unlink()
 
-        code, out = self._systemd(
+        self._checked(
             "analyze",
             "verify",
             str(self.unit_dir / UNIT_SERVICE),
             str(self.unit_dir / UNIT_RESUME),
         )
-        if code != 0:
-            return InstallResult(False, f"systemd-analyze verify failed: {out}")
 
-        self._systemd("daemon-reload")
-        self._systemd("enable", UNIT_RESUME)
+        commands = [("daemon-reload",), ("enable", UNIT_RESUME)]
         if on_calendar is not None:
-            self._systemd("enable", "--now", UNIT_TIMER)
+            commands.append(("enable", "--now", UNIT_TIMER))
+        for command in commands:
+            self._checked(*command)
         return InstallResult(True, changed=tuple(changed))
 
     def resume_unit_enabled(self) -> bool:
@@ -238,21 +278,36 @@ class Installer:
     # ----------------------------------------------------------- uninstall
 
     def uninstall(self, *, purge: bool = False) -> InstallResult:
-        changed: list[str] = []
+        if getattr(os, "geteuid", lambda: 0)() != 0:
+            return InstallResult(False, "uninstallation requires root")
         try:
-            self._systemd("disable", "--now", UNIT_TIMER)
-            self._systemd("disable", UNIT_RESUME)
-        except (FileNotFoundError, OSError):
-            pass  # systemd already gone: keep removing files
+            with ExecutionLock(self.lock_path):
+                self._require_idle()
+                return self._uninstall(purge=purge)
+        except (OSError, ValueError, subprocess.SubprocessError, PatchCycleError) as exc:
+            return InstallResult(False, f"uninstallation failed: {exc}")
+
+    def _require_idle(self) -> None:
+        cycle = StateStore(self.state_dir).load()
+        if cycle is not None and cycle.state not in (State.COMPLETED, State.FAILED):
+            raise OSError("maintenance cycle pending; preserve recovery services until it finishes")
+
+    def _uninstall(self, *, purge: bool) -> InstallResult:
+        changed: list[str] = []
+        if purge:
+            self._check_purge_target()
+        if (self.unit_dir / UNIT_TIMER).exists():
+            self._checked("disable", "--now", UNIT_TIMER)
+        if (self.unit_dir / UNIT_RESUME).exists():
+            self._checked("disable", UNIT_RESUME)
         for unit in (UNIT_TIMER, UNIT_SERVICE, UNIT_RESUME):
             path = self.unit_dir / unit
             if path.exists():
                 path.unlink()
                 changed.append(str(path))
-        with contextlib.suppress(FileNotFoundError, OSError):
-            self._systemd("daemon-reload")
+        self._checked("daemon-reload")
         if purge:
-            for path in (self.config_dir / "config.toml",):
+            for path in (self.config_path,):
                 if path.exists():
                     path.unlink()
                     changed.append(str(path))
@@ -263,15 +318,49 @@ class Installer:
                 changed.append(str(self.state_dir))
         return InstallResult(True, changed=tuple(changed))
 
+    def _check_purge_target(self) -> None:
+        protected = {
+            Path(p).resolve() for p in ("/", "/etc", "/var", "/var/lib", "/usr", "/opt", "/home")
+        }
+        if self.state_dir.resolve() in protected:
+            raise OSError("refusing to purge a system directory")
+        if self.state_dir.exists():
+            check_directory(self.state_dir)
+            for child in self.state_dir.iterdir():
+                if child.name == "state.json":
+                    check_file(child)
+                elif child.name == "history":
+                    self._check_purge_history(child)
+                else:
+                    raise OSError("refusing to purge a state directory containing unrelated files")
+
+    @staticmethod
+    def _check_purge_history(directory: Path) -> None:
+        check_directory(directory)
+        for path in directory.iterdir():
+            check_file(path)
+            if path.suffix == ".json":
+                cycle = CycleState.from_dict(json.loads(read_private(path)))
+                if cycle.run_id != path.stem:
+                    raise OSError("refusing to purge mismatched history record")
+            elif path.name.endswith(".report.txt"):
+                state = directory / (path.name.removesuffix(".report.txt") + ".json")
+                if not state.is_file():
+                    raise OSError("refusing to purge an unpaired report")
+            else:
+                raise OSError("refusing to purge unrelated history data")
+
     # ------------------------------------------------------------- helpers
 
     def _write_config_if_missing(self, changed: list[str]) -> None:
-        self.config_dir.mkdir(parents=True, exist_ok=True)
-        target = self.config_dir / "config.toml"
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        check_directory(self.config_path.parent)
+        target = self.config_path
         if target.exists():
-            reference = self.config_dir / "config.toml.new"
+            check_file(target)
+            reference = target.with_name(f"{target.name}.new")
             if not reference.exists() or reference.read_text() != DEFAULT_CONFIG_TEMPLATE:
-                reference.write_text(DEFAULT_CONFIG_TEMPLATE)
+                _secure_write(reference, DEFAULT_CONFIG_TEMPLATE, mode=0o600)
                 changed.append(str(reference))
             return
         _secure_write(target, DEFAULT_CONFIG_TEMPLATE, mode=0o600)
@@ -282,11 +371,13 @@ class Installer:
             if not path.exists():
                 path.mkdir(parents=True)
                 changed.append(str(path))
+            check_directory(path)
         if os.name == "posix":
             os.chmod(self.state_dir, 0o700)
 
     def _write_unit(self, name: str, content: str, changed: list[str]) -> None:
         self.unit_dir.mkdir(parents=True, exist_ok=True)
+        check_directory(self.unit_dir)
         target = self.unit_dir / name
         if target.exists() and target.read_text() == content:
             return  # idempotent: nothing to do
@@ -296,8 +387,13 @@ class Installer:
 
 def _secure_write(path: Path, content: str, *, mode: int) -> None:
     """Atomic write with fixed permissions (no partial unit files)."""
-    tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    import uuid
+
+    check_directory(path.parent)
+    if path.exists() or path.is_symlink():
+        check_file(path, private=mode == 0o600)
+    tmp = path.with_name(f"{path.name}.tmp.{uuid.uuid4().hex}")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), mode)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(content)

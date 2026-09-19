@@ -397,12 +397,12 @@ class TestFailures:
         assert cycle.updates_applied is True  # update succeeded; health failed
         assert cycle.error["kind"] == "health-check-failed"
 
-    def test_notification_failure_keeps_success_with_warnings(self, tmp_path):
+    def test_notification_failure_keeps_maintenance_outcome(self, tmp_path):
         notifier = FakeNotifier(fail=True)
         engine, store, _ = make_engine(tmp_path, ScriptedProvider(), notifiers=[notifier])
         assert engine.run() == 0
         cycle = store.history()[0]
-        assert cycle.outcome == "success_with_warnings"
+        assert cycle.outcome == "success"
         assert cycle.notification_status == {"fake": "failed:smtp refused"}
 
     def test_kernel_mismatch_after_reboot(self, tmp_path):

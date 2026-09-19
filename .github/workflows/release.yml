@@ -6,6 +6,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
+    branches: ["release/**"]
   workflow_dispatch:
     inputs:
       gate_only:
@@ -29,6 +30,12 @@ jobs:
       - run: ruff check src tests
       - run: ruff format --check src tests
       - run: mypy --strict -p patchcycle
+      - run: python tools/ci_guard.py
+      - run: python tools/check_doc_links.py
+      - run: |
+          pip install pip-audit
+          pip list --format=freeze --exclude d3v-patchcycle > audit-requirements.txt
+          pip-audit --strict --no-deps --disable-pip -r audit-requirements.txt
 
   unit:
     name: unit tests (py${{ matrix.python }})
@@ -44,7 +51,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev]"
-      - run: pytest --cov --cov-report=term -m "not container"
+      - run: sudo "$(command -v python)" -m pytest --cov --cov-report=term --ignore=tests/integration
 
   containers:
     name: L3 provider container (${{ matrix.image }})
@@ -65,8 +72,8 @@ jobs:
             alias: rockylinux_9
           - image: "almalinux:9"
             alias: almalinux_9
-          - image: "fedora:41"
-            alias: fedora_41
+          - image: "fedora:44"
+            alias: fedora_44
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +91,12 @@ jobs:
     needs: containers
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        power_cut: ["0", "1"]
+    env:
+      POWER_CUT: ${{ matrix.power_cut }}
     steps:
       - uses: actions/checkout@v4
       - name: Enable KVM
@@ -96,14 +109,19 @@ jobs:
         run: >-
           sudo apt-get update &&
           sudo apt-get install -y qemu-system-x86 qemu-utils cloud-image-utils
-          curl openssh-client python3
+          curl openssh-client python3 python3-venv
       - name: Run reboot/resume harness
         run: bash tests/vm/reboot_harness.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: l4-release-gate-logs
-          path: /tmp/patchcycle-l4.*/
+          name: l4-release-gate-logs-power-cut-${{ matrix.power_cut }}
+          path: |
+            /tmp/patchcycle-l4.*/*.log
+            /tmp/patchcycle-l4.*/report.json
+            /tmp/patchcycle-l4.*/boot-*.txt
+            /tmp/patchcycle-l4.*/artifact-sha256.txt
+            /tmp/patchcycle-l4.*/pre-cut-state.json
           if-no-files-found: ignore
 
   release:
@@ -127,31 +145,19 @@ jobs:
         run: |
           pip install build
           python -m build
-      - name: Package portable zip (installable bundle)
+      - name: Validate and package installable bundle
         run: |
-          pip install build
-          python -m build --outdir dist
-          python - <<'PY'
-          import glob, shutil, pathlib
-          whl = glob.glob("dist/*.whl")[0]
-          out = pathlib.Path("dist") / (
-              "d3v-patchcycle-" +
-              __import__("tomllib").load(open("pyproject.toml","rb"))["project"]["version"]
-              + "-portable")
-          out.mkdir(parents=True, exist_ok=True)
-          shutil.copy(whl, out)
-          shutil.copy("README.md", out)
-          for doc in ["docs/operations/operations.md", "docs/specifications/configuration.md"]:
-              shutil.copy(doc, out)
-          shutil.make_archive(str(out), "zip", out)
-          PY
-      - name: Generate checksums
-        run: |
-          cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+          pip install twine
+          twine check dist/*.whl dist/*.tar.gz
+          python tools/package_bundle.py
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS.txt
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'b') || contains(github.ref_name, 'a') }}

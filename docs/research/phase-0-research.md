@@ -89,7 +89,7 @@ Key findings:
   tools. PatchCycle **detects and reports**; it only runs `dpkg --configure -a`
   when policy explicitly allows (`repair_interrupted = true`), and never
   removes packages to "fix" a broken state.
-- **Locks:** apt/dpkg use flock-based locks (`/var/lib/dpkg/lock-frontend`,
+- **Locks:** apt/dpkg use POSIX record locks (corrected by the 2026-09-08 native audit) (`/var/lib/dpkg/lock-frontend`,
   `/var/lib/dpkg/lock`, `/var/lib/apt/lists/lock`, archive lock). A busy lock
   means another process legitimately owns the package system. PatchCycle
   waits/retries up to `lock_timeout`, then aborts. Lock files are **never

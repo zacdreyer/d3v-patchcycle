@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   pull_request:
 
 permissions:
@@ -25,10 +25,13 @@ jobs:
         run: ruff format --check src tests
       - name: mypy strict
         run: mypy --strict -p patchcycle
+      - name: Local documentation links
+        run: python tools/check_doc_links.py
       - name: pip-audit (dev environment)
         run: |
           pip install pip-audit
-          pip-audit --strict
+          pip list --format=freeze --exclude d3v-patchcycle > audit-requirements.txt
+          pip-audit --strict --no-deps --disable-pip -r audit-requirements.txt
 
   unit:
     name: unit tests (py${{ matrix.python }} on ${{ matrix.os }})
@@ -50,7 +53,12 @@ jobs:
         # package-manager or reboot binaries outside container-marked tests.
         run: python tools/ci_guard.py
       - name: pytest with coverage
-        run: pytest --cov --cov-report=term -m "not container"
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo "$(command -v python)" -m pytest --cov --cov-report=term --ignore=tests/integration
+          else
+            python -m pytest --cov --cov-report=term --ignore=tests/integration
+          fi
         shell: bash
 
   container-integration:
@@ -73,8 +81,8 @@ jobs:
             alias: rockylinux_9
           - image: "almalinux:9"
             alias: almalinux_9
-          - image: "fedora:41"
-            alias: fedora_41
+          - image: "fedora:44"
+            alias: fedora_44
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

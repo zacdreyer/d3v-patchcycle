@@ -13,6 +13,12 @@ jobs:
   reboot-cycle:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        power_cut: ["0", "1"]
+    env:
+      POWER_CUT: ${{ matrix.power_cut }}
     steps:
       - uses: actions/checkout@v4
       - name: Enable KVM
@@ -22,12 +28,17 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Install harness dependencies
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils cloud-image-utils curl openssh-client
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils cloud-image-utils curl openssh-client python3-venv
       - name: Run reboot/resume harness
         run: bash tests/vm/reboot_harness.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: l4-harness-logs
-          path: /tmp/patchcycle-l4.*/
+          name: l4-harness-logs-power-cut-${{ matrix.power_cut }}
+          path: |
+            /tmp/patchcycle-l4.*/*.log
+            /tmp/patchcycle-l4.*/report.json
+            /tmp/patchcycle-l4.*/boot-*.txt
+            /tmp/patchcycle-l4.*/artifact-sha256.txt
+            /tmp/patchcycle-l4.*/pre-cut-state.json
           if-no-files-found: ignore

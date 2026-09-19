@@ -1,0 +1,16 @@
+Sep 08 21:27:27 patchcycle-test systemd[1]: /etc/systemd/system/d3v-patchcycle.service:4: ConditionPathExists= path is not absolute, ignoring: "/etc/d3v-patchcycle/config.toml"
+Sep 08 21:27:29 patchcycle-test systemd[1]: /etc/systemd/system/d3v-patchcycle.service:4: ConditionPathExists= path is not absolute, ignoring: "/etc/d3v-patchcycle/config.toml"
+Sep 08 21:27:31 patchcycle-test systemd[1]: Starting d3v-patchcycle.service - D3V PatchCycle maintenance run...
+Sep 08 21:27:32 patchcycle-test d3v-patchcycle[2867]: INFO state IDLE -> PRECHECK
+Sep 08 21:27:33 patchcycle-test d3v-patchcycle[2867]: INFO state PRECHECK -> REFRESHING
+Sep 08 21:27:41 patchcycle-test d3v-patchcycle[2867]: INFO state REFRESHING -> DISCOVERING_UPDATES
+Sep 08 21:27:46 patchcycle-test d3v-patchcycle[2867]: INFO updates: 1 applicable, 0 held-back
+Sep 08 21:27:46 patchcycle-test d3v-patchcycle[2867]: INFO state DISCOVERING_UPDATES -> UPGRADING
+-- Boot af03c9cc132b4dcd86102c715f4bcc61 --
+Sep 08 21:28:25 patchcycle-test systemd[1]: Starting d3v-patchcycle-resume.service - D3V PatchCycle post-boot maintenance resume...
+Sep 08 21:28:28 patchcycle-test d3v-patchcycle-resume[646]: ERROR cycle failed at UPGRADING: unexpected-reboot during UPGRADING; read-only diagnostics: PreflightResult(ok=False, kind='interrupted-transaction', detail="dpkg reports packages in an inconsistent state:\nThe following packages are only half configured, probably due to problems\nconfiguring them the first time.  The configuration should be retried using\ndpkg --configure <package> or the configure menu option in dselect:\n patchcycle-l4-fixture Disposable L4 permission fixture\nRun 'dpkg --configure -a' manually, or set updates.repair_interrupted = true (never removes packages).", pre_existing_reboot=False, warnings=()); VerifyResult(consistent=False, outstanding=0, detail="E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem.")
+Sep 08 21:28:28 patchcycle-test d3v-patchcycle-resume[646]: INFO state UPGRADING -> FAILED
+Sep 08 21:28:28 patchcycle-test systemd[1]: d3v-patchcycle-resume.service: Main process exited, code=exited, status=1/FAILURE
+Sep 08 21:28:28 patchcycle-test systemd[1]: d3v-patchcycle-resume.service: Failed with result 'exit-code'.
+Sep 08 21:28:28 patchcycle-test systemd[1]: Failed to start d3v-patchcycle-resume.service - D3V PatchCycle post-boot maintenance resume.
+Sep 08 21:28:28 patchcycle-test systemd[1]: d3v-patchcycle-resume.service: Consumed 1.692s CPU time, 20.8M memory peak.

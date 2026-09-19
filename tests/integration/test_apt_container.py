@@ -46,7 +46,8 @@ def test_detect_and_discovery_in_container(image):
         + '\necho "== detect =="\n'
         + "/opt/pc-venv/bin/d3v-patchcycle detect\n"
         + 'echo "== updates (discovery only) == "\n'
-        + "/opt/pc-venv/bin/d3v-patchcycle updates --config /dev/null || true\n"
+        + "install -m 600 /dev/null /opt/fixture-config.toml\n"
+        + "/opt/pc-venv/bin/d3v-patchcycle updates --config /opt/fixture-config.toml\n"
         + 'echo "== OK =="\n'
     )
     proc = run_in_container(image, script)
@@ -54,25 +55,17 @@ def test_detect_and_discovery_in_container(image):
     assert "Provider: apt (supported)" in proc.stdout
 
 
-@pytest.mark.parametrize("image", ["ubuntu:24.04"], ids=image_alias)
+@pytest.mark.parametrize("image", MATRIX, ids=image_alias)
 def test_real_upgrade_and_reboot_detection(image):
     """A real (old-pinned) package upgrade through PatchCycle's engine path."""
     script = (
         "set -eu\n"
         + _install_cmd(image)
         + """
-export DEBIAN_FRONTEND=noninteractive
-# Downgrade a trivial package so an update exists, then let PatchCycle upgrade.
-apt-get install -y -qq --allow-downgrades hello=2.10-3 2>/dev/null || true
-
-mkdir -p /var/lib/d3v-patchcycle
-/opt/pc-venv/bin/d3v-patchcycle run --config /dev/null || rc=$?
-echo "run exit: ${rc:-0}"
-# State must be archived (cycle completed or cleanly failed).
-ls /var/lib/d3v-patchcycle/history/ | grep -q . && echo "history: present"
-echo "== OK =="
+apt-get install -y -qq dpkg-dev
+/opt/pc-venv/bin/python /work/tests/integration/apt_transaction.py
 """
     )
     proc = run_in_container(image, script)
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "history: present" in proc.stdout
+    assert "PASS: actual fixture upgraded 1.0 -> 2.0" in proc.stdout

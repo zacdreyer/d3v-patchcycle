@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import http.server
 import socket
-import sys
 import threading
 
 from patchcycle.health import (
@@ -80,11 +79,16 @@ class TestHttpGet:
 
 
 class TestRunCommand:
-    def test_exit_code_and_output(self):
-        code, _ = _default_run_command((sys.executable, "-c", "pass"), 5.0)
+    def test_exit_code_and_output(self, trusted_python):
+        code, _ = _default_run_command((trusted_python, "-c", "pass"), 5.0)
         assert code == 0
         code, detail = _default_run_command(
-            (sys.executable, "-c", "import sys; sys.stderr.write('bad'); sys.exit(2)"), 5.0
+            (
+                trusted_python,
+                "-c",
+                "import sys; sys.stderr.write('bad'); sys.exit(2)",
+            ),
+            5.0,
         )
         assert code == 2
         assert "bad" in detail

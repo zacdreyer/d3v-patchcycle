@@ -8,6 +8,15 @@ Implements: FR-04, FR-08–FR-11 (product-specification.md)
 
 ## 1. Principles
 
+Readiness clarification (2026-09-08): `existing_pending=reboot_first` means
+PRECHECK → REBOOT_PENDING before refresh/apply, then POST_REBOOT → PRECHECK
+after verified boot. Persist a `reboot_before_updates` marker for that branch;
+clear it before restarting precheck. If reboot policy prohibits the initial
+reboot, report manual reboot required without applying updates. This supersedes
+the contradictory update-first wording in §4.5. A queued reboot on the original
+boot leaves REBOOTING pending and returns; only boot-ID change permits POST_REBOOT.
+Reboot timestamps and attempt counts must be durable before issuing the command.
+
 1. The state machine is **persistent**: the current state and all data needed
    to resume are written to `/var/lib/d3v-patchcycle/state.json`
    **atomically before** the state's action executes. If the process dies at
@@ -206,26 +215,28 @@ Resume entry points (from `d3v-patchcycle resume` after boot):
 - **Before** `UPGRADING` and before `REBOOTING`, the engine checks that the
   estimated time to finish the disruptive action fits in the remaining window
   (estimates: refresh+discover 5m; upgrade: max(10m, 30s/package); reboot +
-  verify: 15m; all configurable via `[maintenance].estimate_*`). If not, the
+  verify: 15m; configured via `[maintenance.estimates]`). Refresh is advisory
+  in the dry-run total; after discovery the upgrade gate uses the remaining
+  upgrade estimate, and the reboot gate uses reboot+verify. If not, the
   cycle stops cleanly **before** the disruptive action with
   `outcome=BLOCKED, reason=window` and notifies; the next scheduled run
   retries.
 - If the window **expires mid-upgrade**: the running package transaction is
   always allowed to complete (never interrupt dpkg/apt mid-transaction);
   subsequent disruptive steps (reboot) are deferred per the same rule, and the
-  state records `window_expired: true`. Verification, health checks and
+  state records a blocked outcome and explicit window reason. Verification, health checks and
   notification are **not** window-restricted — they are non-disruptive.
 - Principle: the clock never justifies leaving the system knowingly
   inconsistent; it only gates *starting* disruptive actions.
 
-## 6. Persisted state schema (version 1)
+## 6. Persisted state schema (version 2; ADR-0010)
 
 `/var/lib/d3v-patchcycle/state.json` — mode 0600, root:root, atomic writes.
 
 ```json
 {
-  "schema_version": 1,
-  "run_id": "018f2c3a-…-uuid4",
+  "schema_version": 2,
+  "run_id": "018f2c3a-example-uuid4",
   "state": "REBOOTING",
   "outcome": null,
   "started_at": "2026-08-23T02:00:01Z",
@@ -234,11 +245,7 @@ Resume entry points (from `d3v-patchcycle resume` after boot):
   "os": {"id": "ubuntu", "version_id": "24.04", "pretty_name": "Ubuntu 24.04 LTS",
          "codename": "noble", "arch": "x86_64", "init": "systemd"},
   "provider": "apt",
-  "config_hash": "sha256:…",
-  "indexes_refreshed_at": "2026-08-23T02:01:10Z",
-  "updates_available": [{"name": "libc6", "from": "2.39-0ubuntu8.3", "to": "2.39-0ubuntu8.4", "security": true}],
-  "updates_applicable": [],
-  "held_back": [],
+  "updates_available": [{"name": "libc6", "version_from": "2.39-0ubuntu8.3", "version_to": "2.39-0ubuntu8.4", "security": true, "held": false}],
   "packages_pending": 27,
   "packages_updated": 0,
   "updates_applied": false,
@@ -248,13 +255,17 @@ Resume entry points (from `d3v-patchcycle resume` after boot):
   "reboot_reasons": [],
   "pre_existing_reboot": false,
   "boot_id_before": null,
+  "boot_id_after": null,
   "kernel_before": "6.8.0-55-generic",
   "kernel_after": null,
   "reboot_initiated_at": null,
-  "window_expired": false,
+  "reboot_attempts": 0,
+  "reboot_before_updates": false,
+  "initial_reboot_completed": false,
   "verify_passed": null,
   "outstanding_updates": null,
   "health_results": [],
+  "warnings": [],
   "notification_status": {},
   "error": null,
   "transitions": [{"from": "IDLE", "to": "PRECHECK", "at": "…"}]
@@ -268,11 +279,14 @@ Rules:
 - `error` object: `{kind, message, stage, manual_intervention}`.
 - `transitions` is the authoritative audit trail of the cycle (also mirrored
   to structured logs).
-- History files share the schema plus final `outcome` and `completed_at`.
+- History files share the schema with final `outcome`; `updated_at` is the
+  terminal transition timestamp. Held records remain in `updates_available`.
+  Earlier draft-only config-hash/index-timestamp fields are not emitted.
 
 ## 7. Invariants (asserted in code and tested)
 
-1. `REBOOTING` may only be entered after `boot_id_before` is persisted.
+1. A reboot command may only be issued after boot identity, timestamp and
+   attempt count are persisted successfully.
 2. `POST_REBOOT` requires `boot_id_before != current boot_id`.
 3. `updates_applied == true` ⇒ `UPGRADING` is never re-executed on resume.
 4. No state transition occurs without a preceding successful atomic write.

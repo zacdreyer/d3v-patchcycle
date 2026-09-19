@@ -7,6 +7,7 @@ Critical convention (never shared with the APT provider):
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 from collections.abc import Callable
@@ -23,6 +24,7 @@ from patchcycle.models import (
     VerifyResult,
 )
 from patchcycle.providers.base import UpdateProvider
+from patchcycle.providers.versionlock import is_held, locked_names
 from patchcycle.subproc import CommandResult, CommandTimeout
 
 _REQUIRED_BINARIES = ("dnf", "rpm")
@@ -30,8 +32,8 @@ _DEFAULT_SEARCH_PATHS = ("/usr/bin", "/bin", "/usr/sbin", "/sbin")
 
 # check-update line: name.arch  version-release  repo
 _UPDATE_RE = re.compile(r"^(\S+)\.(\S+)\s+(\S+)\s+(\S+)\s*$")
-# updateinfo line: ADVISORY  severity  name-version-release.arch
-_UPDATEINFO_RE = re.compile(r"^\S+\s+\S+\s+(\S+)$")
+# DNF4 uses three columns, DNF5 five; identify the NEVRA token in either.
+_ADVISORY_PACKAGE_RE = re.compile(r"^(.+)-[^\s-]+-[^\s-]+\.[A-Za-z0-9_]+$")
 _KERNEL_RE = re.compile(r"^kernel-core-(\S+)$")
 
 Runner = Callable[..., CommandResult]
@@ -66,6 +68,7 @@ def parse_check_update(output: str) -> list[UpdateInfo]:
                     name=name,
                     version_from="",
                     version_to=m.group(3),
+                    arch=m.group(2),
                     requires_reboot_hint=name in ("kernel", "kernel-core", "glibc", "systemd"),
                 )
             )
@@ -140,7 +143,7 @@ class DnfProvider(UpdateProvider):
 
     def _dnf(self, *args: str, timeout: float) -> CommandResult:
         return self._runner(
-            [self.binaries["dnf"], *args],
+            [self.binaries["dnf"], "--setopt=exit_on_lock=True", *args],
             timeout=timeout,
             extra_env={"LANG": "C", "LC_ALL": "C"},
         )
@@ -155,6 +158,12 @@ class DnfProvider(UpdateProvider):
         if version.exit_code != 0:
             return PreflightResult(ok=False, kind="pm-unhealthy", detail=version.stderr.strip())
         check = self._dnf("check", timeout=120)
+        if check.exit_code == 200 or (
+            check.exit_code != 0 and "transaction lock" in check.stderr.lower()
+        ):
+            return PreflightResult(
+                ok=False, kind="pm-locked", detail="DNF transaction lock is held"
+            )
         if check.exit_code != 0:
             return PreflightResult(
                 ok=False,
@@ -177,46 +186,81 @@ class DnfProvider(UpdateProvider):
         return RefreshResult(ok=False, detail=(result.stderr or result.stdout).strip()[-2000:])
 
     def list_updates(self, strategy: str) -> list[UpdateInfo]:
+        self._strategy = strategy
         result = self._dnf("--refresh", "--quiet", "check-update", timeout=300)
-        if result.exit_code == 1:
+        if result.exit_code not in (0, 100):
             raise PreflightError(
                 f"dnf check-update failed: {(result.stderr or result.stdout).strip()[-500:]}"
             )
         # exit 0 = none, 100 = updates available
         updates = parse_check_update(result.stdout)
-        if not updates:
-            return []
-        security_names = self._security_names()
+        security_names = self._security_names() if updates else set()
+        locks = self._versionlocks()
         classified = [
             UpdateInfo(
                 name=u.name,
                 version_from=u.version_from,
                 version_to=u.version_to,
                 security=u.name in security_names,
-                held=False,
+                held=is_held(u, locks, self._rpm_compare),
+                arch=u.arch,
                 requires_reboot_hint=u.requires_reboot_hint,
             )
             for u in updates
         ]
+        classified.extend(self._hidden_locked_packages(locks, classified))
         if strategy == "security":
-            return [u for u in classified if u.security]
+            return [u for u in classified if u.security or u.held]
         return classified
+
+    def _hidden_locked_packages(self, listing: str, updates: list[UpdateInfo]) -> list[UpdateInfo]:
+        patterns = locked_names(listing)
+        if not patterns:
+            return []
+        installed = self._runner(
+            [
+                self.binaries["rpm"],
+                "-qa",
+                "--queryformat",
+                "%{NAME}\t%{EPOCHNUM}:%{VERSION}-%{RELEASE}\t%{ARCH}\n",
+            ],
+            timeout=60,
+            extra_env={"LANG": "C", "LC_ALL": "C"},
+        )
+        if installed.exit_code != 0:
+            raise PreflightError("cannot inspect installed versionlocked packages")
+        visible = {(u.name, u.arch) for u in updates}
+        held = []
+        for line in installed.stdout.splitlines():
+            fields = line.split("\t")
+            if len(fields) != 3:
+                continue
+            name, version, arch = fields
+            if (name, arch) not in visible and any(fnmatch.fnmatchcase(name, p) for p in patterns):
+                held.append(UpdateInfo(name, version, "", held=True, arch=arch))
+        return held
+
+    def _versionlocks(self) -> str:
+        result = self._dnf("--quiet", "versionlock", "list", timeout=60)
+        if result.exit_code == 0:
+            return result.stdout
+        error = result.stdout + result.stderr
+        if "No such command" in error or 'Unknown argument "versionlock"' in error:
+            return ""  # absent plugin also means native DNF cannot apply versionlocks
+        raise PreflightError("cannot read native DNF versionlocks")
 
     def _security_names(self) -> set[str]:
         result = self._dnf(
             "--quiet", "updateinfo", "list", "--available", "--security", timeout=120
         )
         if result.exit_code != 0:
-            return set()
+            raise PreflightError("dnf updateinfo failed; security classification is unavailable")
         names: set[str] = set()
         for line in result.stdout.splitlines():
-            m = _UPDATEINFO_RE.match(line.strip())
-            if m:
-                # name-version-release.arch → strip version onward
-                nvr = m.group(1)
-                name = re.split(r"-\d", nvr)[0]
-                if name:
-                    names.add(name)
+            for token in line.split():
+                match = _ADVISORY_PACKAGE_RE.fullmatch(token)
+                if match:
+                    names.add(match.group(1))
         return names
 
     def apply_updates(self, strategy: str, updates: list[UpdateInfo]) -> ApplyResult:
@@ -277,7 +321,9 @@ class DnfProvider(UpdateProvider):
             return VerifyResult(
                 consistent=False, detail=(check.stderr or check.stdout).strip()[-1000:]
             )
-        outstanding = len(self.list_updates("safe"))
+        outstanding = len(
+            [u for u in self.list_updates(getattr(self, "_strategy", "safe")) if not u.held]
+        )
         return VerifyResult(consistent=True, outstanding=outstanding)
 
     def _newest_kernel(self) -> str | None:
@@ -294,4 +340,28 @@ class DnfProvider(UpdateProvider):
         )
         if result.exit_code != 0:
             return None
-        return parse_kernel_versions(result.stdout)
+        best: str | None = None
+        for line in result.stdout.splitlines():
+            match = _KERNEL_RE.fullmatch(line.strip())
+            if match:
+                version = match.group(1)
+                if best is None or self._rpm_compare(version, best) > 0:
+                    best = version
+        return best
+
+    def _rpm_compare(self, version: str, previous: str) -> int:
+        # RPM version labels cannot inject Lua code through this restricted grammar.
+        if not all(re.fullmatch(r"[A-Za-z0-9._+~^:\-]+", value) for value in (version, previous)):
+            raise PreflightError("invalid installed kernel version label")
+        result = self._runner(
+            [
+                self.binaries["rpm"],
+                "--eval",
+                f"%{{lua:print(rpm.vercmp('{version}', '{previous}'))}}",
+            ],
+            timeout=30,
+            extra_env={"LANG": "C", "LC_ALL": "C"},
+        )
+        if result.exit_code != 0 or result.stdout.strip() not in ("-1", "0", "1"):
+            raise PreflightError("native RPM kernel comparison failed")
+        return int(result.stdout.strip())

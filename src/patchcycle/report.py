@@ -11,6 +11,12 @@ from patchcycle.models import ReportData
 
 def render_report(report: ReportData) -> str:
     """Plain-text report body (product-spec §23 format)."""
+    outstanding = (
+        report.outstanding_updates if report.outstanding_updates is not None else "Unknown"
+    )
+    health = "Not run"
+    if report.health_results:
+        health = "Passed" if all(result.ok for result in report.health_results) else "FAILED"
     lines = [
         "D3V PatchCycle",
         "",
@@ -30,8 +36,8 @@ def render_report(report: ReportData) -> str:
         f"Kernel before: {report.kernel_before}",
         f"Kernel after: {report.kernel_after}",
         "",
-        f"Outstanding updates: {report.outstanding_updates}",
-        f"Health checks: {'Passed' if all(r.ok for r in report.health_results) else 'FAILED'}",
+        f"Outstanding updates: {outstanding}",
+        f"Health checks: {health}",
         f"Failed services: {report.failed_services}",
     ]
     if report.error:
@@ -44,4 +50,9 @@ def render_report(report: ReportData) -> str:
     if report.notification_status:
         lines += ["", "Notifications:"]
         lines += [f"  {name}: {status}" for name, status in report.notification_status.items()]
+    if report.warnings:
+        lines += ["", "Warnings:", *[f"  {warning}" for warning in report.warnings]]
+    for result in report.health_results:
+        if not result.ok:
+            lines.append(f"Health check {result.name}: {result.detail}")
     return "\n".join(lines) + "\n"

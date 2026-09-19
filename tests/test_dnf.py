@@ -52,7 +52,8 @@ kernel-core-5.14.0-503.40.1.el9_5.x86_64
 
 class FakeRunner:
     def __init__(self, results=None, default=None):
-        self.results = results or {}
+        # RPM_KERNELS is oldest-first; model the native comparison result.
+        self.results = {("--eval",): CommandResult(0, "1", ""), **(results or {})}
         self.default = default or CommandResult(0, "", "")
         self.calls: list = []
 
@@ -365,6 +366,8 @@ class TestRegistration:
         ident = OsIdentity(
             family="linux",
             os_id="almalinux",
+            version_id="9.5",
+            arch="x86_64",
             id_like=("rhel", "centos", "fedora"),
             pretty_name="AlmaLinux 9.5",
         )
@@ -374,7 +377,9 @@ class TestRegistration:
     def test_fedora_by_id(self):
         from patchcycle.providers import select_provider
 
-        ident = OsIdentity(family="linux", os_id="fedora", pretty_name="Fedora 41")
+        ident = OsIdentity(
+            family="linux", os_id="fedora", version_id="44", pretty_name="Fedora 44", arch="x86_64"
+        )
         assert select_provider(ident).name == "dnf"
 
     def test_no_dangerous_flags_in_source(self):

@@ -19,10 +19,24 @@ from patchcycle.providers.apt import AptProvider
 from patchcycle.subproc import CommandResult
 
 
+class TransactionRunner(FakeRunner):
+    """A successful transaction consumes its updates; verification sees none."""
+
+    def __call__(self, argv, **kwargs):
+        result = super().__call__(argv, **kwargs)
+        if (
+            result.exit_code == 0
+            and "-s" not in argv
+            and any(op in argv for op in ("upgrade", "dist-upgrade", "install"))
+        ):
+            self.results[("-s", "upgrade")] = CommandResult(0, "", "")
+        return result
+
+
 @pytest.fixture()
 def apt(tmp_path, fake_bin, monkeypatch):
     """AptProvider wired to fixtures; returns (provider, runner)."""
-    runner = FakeRunner(
+    runner = TransactionRunner(
         {
             ("--version",): CommandResult(0, "apt 3.0.3\n", ""),
             ("--audit",): CommandResult(0, "", ""),
@@ -77,7 +91,7 @@ class TestFullCycleThroughApt:
         assert engine.run() == 0
         install_calls = [argv for argv, _ in runner.calls if "--only-upgrade" in argv]
         assert install_calls
-        assert "libssl3t64" in install_calls[0]
+        assert any(arg.startswith("libssl3t64=") for arg in install_calls[0])
         assert "libc6" not in install_calls[0]  # not a security update
 
     def test_interrupted_dpkg_blocks_before_any_change(self, apt, tmp_path):

@@ -1,13 +1,12 @@
 # D3V PatchCycle — Operations Guide
 
-Status: Baseline for V1 (matches specification; current at v1.0.0-rc1)
-Date: 2026-08-24
+> **Release candidate 1.0.0rc2 (2026-09-08): local acceptance passed.**
+> Audit fixes, seven-distribution integration tests and normal/power-loss VM
+> recovery are verified. Stable approval requires final-commit CI and target-host
+> staging. Follow the [readiness checklist](../development/production-readiness.md).
 
-> **Pre-release notice:** D3V PatchCycle is under active development
-> (v1.0.0-rc1). The procedures below match the specification and are
-> integration-tested, but the software has not yet cut a stable release —
-> the V1.0 gate is the gated release pipeline passing, including the L4
-> real-VM reboot run. Test on non-production systems first.
+Status: Release candidate 1.0.0rc2; deployment acceptance pending
+Date: 2026-09-08
 
 > The **[README](../../README.md)** contains the full install / configure /
 > schedule / use / upgrade / uninstall guide. This document covers the
@@ -24,28 +23,42 @@ sudo d3v-patchcycle install
 
 What it does (idempotent; validated by `systemd-analyze calendar` + `verify`):
 
-1. Verifies systemd presence (fails safely on non-systemd systems), supported
-   OS, and Python ≥ 3.11.
-2. Installs the application entrypoint (`/usr/local/bin/d3v-patchcycle`).
+1. Requires root, obtains the maintenance execution lock, refuses a pending
+   cycle, and verifies systemd calendar/unit validation.
+2. Uses the existing application entrypoint installed by pip into the chosen
+   virtual environment. Install the wheel before running this command.
 3. Creates `/etc/d3v-patchcycle/config.toml` (0600 root:root) **only if
    absent** — an existing config is never overwritten; the shipped default
    is written to `config.toml.new` for comparison.
-4. Creates `/var/lib/d3v-patchcycle/` (0700) with `history/`, and
-   `/var/log/d3v-patchcycle/` (0750 root:adm) when file logging is enabled.
+4. Creates `/var/lib/d3v-patchcycle/` (0700) with `history/`. File logging
+   creates the configured parent directory on first use and uses a root-owned
+   private file (0600). Existing writable parents or non-private files are refused.
 5. Renders and installs `d3v-patchcycle.timer`, `d3v-patchcycle.service`
    (hardened oneshot, `EnvironmentFile=-/etc/d3v-patchcycle/environment`),
    and the always-on `d3v-patchcycle-resume.service` from `[maintenance]`
    config; enables the resume service and the timer (`enable --now`).
 6. Prints next steps (`config-check`, `run --dry-run`).
 
-`schedule = "manual"` installs the resume service only (no timer).
+`schedule = "manual"` installs both services and removes an existing timer.
+Custom `--config` paths are included in both service commands. Configuration,
+state and executable paths must have trusted ownership and permissions; symlinks
+and writable ancestors are refused where they could redirect privileged I/O.
+Uninstall also obtains the execution lock and refuses unresolved cycle state.
 
 Uninstall:
 
 ```bash
 sudo d3v-patchcycle uninstall          # keeps config, state, logs, history
-sudo d3v-patchcycle uninstall --purge  # removes everything
+sudo d3v-patchcycle uninstall --purge  # also removes active config and state/history
 ```
+
+Purge retains the installed Python environment, external log files, the optional
+environment file and `config.toml.new`. Remove those explicitly only after
+reviewing the retained operational evidence and secrets. Upgrade only when no
+cycle is pending; schema-2 state must not be handed to an older binary.
+Purge refuses unrelated files, invalid history or unpaired reports in a custom
+state directory. Inspect and relocate such files deliberately before retrying;
+do not use an existing system/application directory as PatchCycle state storage.
 
 ## 2. Day-to-day commands
 

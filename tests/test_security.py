@@ -11,6 +11,7 @@ import logging
 import os
 import stat
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -34,19 +35,30 @@ class TestT1CommandInjection:
         """A hostile 'package name' is just an argv element — no shell."""
         marker = tmp_path / "pwned"
         result = run_argv(
-            [sys.executable, "-c", "import sys; sys.exit(0)", "; touch", str(marker)],
+            [
+                str(Path(sys.executable).resolve()),
+                "-c",
+                "import sys; sys.exit(0)",
+                "; touch",
+                str(marker),
+            ],
             timeout=5,
         )
         assert result.exit_code == 0
         assert not marker.exists()
 
-    def test_hook_argv_never_shell_interpreted(self, tmp_path):
+    def test_hook_argv_never_shell_interpreted(self, tmp_path, trusted_python):
         runner = HookRunner.__new__(HookRunner)
         from patchcycle.config import HooksConfig
 
         runner.config = HooksConfig(timeout_s=10)
         results = runner._run_one(
-            (sys.executable, "-c", "import sys;sys.exit(0)", "$(touch /tmp/pc-pwned)")
+            (
+                trusted_python,
+                "-c",
+                "import sys;sys.exit(0)",
+                "$(touch /tmp/pc-pwned)",
+            )
         )
         assert results.ok
         if os.name == "posix":
@@ -76,7 +88,7 @@ class TestT3EnvironmentManipulation:
         monkeypatch.setenv("PATCHCYCLE_AMBIENT", "leak")
         result = run_argv(
             [
-                sys.executable,
+                str(Path(sys.executable).resolve()),
                 "-c",
                 "import os,sys;sys.exit(0 if not os.environ.get('LD_PRELOAD') "
                 "and not os.environ.get('PATCHCYCLE_AMBIENT') else 9)",
@@ -85,14 +97,14 @@ class TestT3EnvironmentManipulation:
         )
         assert result.exit_code == 0
 
-    def test_hook_env_is_minimal(self, monkeypatch):
+    def test_hook_env_is_minimal(self, monkeypatch, trusted_python):
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "canary-secret")
         from patchcycle.config import HooksConfig
 
         runner = HookRunner(HooksConfig(timeout_s=10))
         results = runner._run_one(
             (
-                sys.executable,
+                trusted_python,
                 "-c",
                 "import os,sys;sys.exit(0 if not os.environ.get('AWS_SECRET_ACCESS_KEY') else 9)",
             )

@@ -41,6 +41,7 @@ from patchcycle.providers import select_provider
 from patchcycle.providers.base import UpdateProvider
 from patchcycle.reboot import RebootController
 from patchcycle.state_store import StateStore
+from patchcycle.subproc import scrubbed_env
 from patchcycle.window import Window
 
 
@@ -48,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     # --config is accepted both before and after the subcommand.
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
-        "--config", type=Path, default=DEFAULT_CONFIG_PATH, help="path to config.toml"
+        "--config", type=Path, default=argparse.SUPPRESS, help="path to config.toml"
     )
     parser = argparse.ArgumentParser(
         prog="d3v-patchcycle",
@@ -95,7 +96,10 @@ def build_parser() -> argparse.ArgumentParser:
     uninstall.add_argument(
         "--purge",
         action="store_true",
-        help="also remove configuration, state, logs, and history",
+        help=(
+            "also remove active configuration and state/history; "
+            "retain external logs and environment"
+        ),
     )
     sub.add_parser(
         "schedule",
@@ -107,6 +111,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if not hasattr(args, "config"):
+        args.config = DEFAULT_CONFIG_PATH
+    try:
+        return _dispatch(args)
+    except PatchCycleError as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.exit_code
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"operation failed: {type(exc).__name__}", file=sys.stderr)
+        return 1
+
+
+def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "version":
         print(f"d3v-patchcycle {__version__} (state schema v{STATE_SCHEMA_VERSION})")
         return 0
@@ -201,7 +218,7 @@ def _cmd_config_check(args: argparse.Namespace) -> int:
     if config.notifications.email.enabled:
         notifiers.append(f"email -> {', '.join(config.notifications.email.to)}")
     if config.notifications.webhook.enabled:
-        notifiers.append(f"webhook -> {config.notifications.webhook.url}")
+        notifiers.append("webhook (configured)")
     print(f"notifiers: {', '.join(notifiers) if notifiers else 'none enabled'}")
     return 0
 
@@ -224,12 +241,14 @@ def _cmd_status_history(args: argparse.Namespace) -> int:
                     f"last cycle: {last.run_id} -> {last.outcome or last.state.value} "
                     f"({last.started_at})"
                 )
+                _print_notifications(last.notification_status)
             return 0
         print(f"state: {cycle.state.value}")
         print(f"run_id: {cycle.run_id}")
         print(f"started: {cycle.started_at}  updated: {cycle.updated_at}")
         if cycle.error:
             print(f"error: {cycle.error.get('kind')}: {cycle.error.get('message')}")
+        _print_notifications(cycle.notification_status)
         return 0
     cycles = store.history()
     if not cycles:
@@ -245,7 +264,21 @@ def _cmd_status_history(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_notifications(status: dict[str, str]) -> None:
+    for name, result in sorted(status.items()):
+        print(f"notification {name}: {result}")
+
+
 def _cmd_cycle(args: argparse.Namespace) -> int:
+    if args.command == "resume" and not args.force and not os.environ.get("INVOCATION_ID"):
+        print(
+            "manual resume requires --force; normally invoked by the boot service", file=sys.stderr
+        )
+        return 2
+    return _execute_cycle_command(args)
+
+
+def _execute_cycle_command(args: argparse.Namespace) -> int:
     try:
         config = load_config(args.config)
     except ConfigError as exc:
@@ -307,11 +340,15 @@ def _cmd_cycle(args: argparse.Namespace) -> int:
 
 def _cmd_install(args: argparse.Namespace) -> int:
     try:
-        config = load_config(args.config)
+        if args.command == "install" and not args.config.exists():
+            config = Config()
+        else:
+            config = load_config(args.config)
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
         return 4
     installer = _make_installer(config, executable=_entrypoint())
+    installer.config_path = args.config.absolute()
     if args.command == "schedule":
         on_calendar = schedule_to_oncalendar(config.maintenance)
         if on_calendar is None:
@@ -367,11 +404,10 @@ def _entrypoint() -> str:
 
 
 def _load_config_tolerant(path: Path) -> Config:
-    """status/history work without a valid config (paths fall back)."""
-    try:
-        return load_config(path)
-    except ConfigError:
+    """Allow an uninstalled default path, never hide malformed/custom config."""
+    if path == DEFAULT_CONFIG_PATH and not path.exists() and not path.is_symlink():
         return Config()
+    return load_config(path)
 
 
 def _build_engine(
@@ -418,6 +454,7 @@ def _users_logged_in() -> bool:  # pragma: no cover - Linux-only wiring (L3/L4)
     try:
         proc = subprocess.run(  # noqa: S603
             ["/usr/bin/loginctl", "list-sessions", "--no-legend"],
+            env=scrubbed_env(),
             shell=False,
             capture_output=True,
             text=True,
@@ -426,25 +463,27 @@ def _users_logged_in() -> bool:  # pragma: no cover - Linux-only wiring (L3/L4)
         )
         if proc.returncode == 0:
             return any(line.strip() for line in proc.stdout.splitlines())
-    except OSError:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         proc = subprocess.run(  # noqa: S603
             ["/usr/bin/who"],
+            env=scrubbed_env(),
             shell=False,
             capture_output=True,
             text=True,
             timeout=10,
             check=False,
         )
-        return bool(proc.stdout.strip())
-    except OSError:
-        return False
+        return proc.returncode != 0 or bool(proc.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        return True
 
 
 def _system_reboot() -> None:  # pragma: no cover - Linux-only wiring (L4)
     subprocess.run(  # noqa: S603 - fixed argv, no shell
         ["/usr/bin/systemctl", "reboot"],
+        env=scrubbed_env(),
         shell=False,
         check=True,
         timeout=30,

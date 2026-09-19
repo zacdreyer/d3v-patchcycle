@@ -1,5 +1,12 @@
 # Phased Implementation Plan
 
+> **Readiness update (2026-09-08): NOT production ready.** Earlier completion,
+> integration-test and feature claims below are historical or intended behavior,
+> not current proof of specification compliance. Audit remediation is underway.
+> Follow the [production-readiness checklist](production-readiness.md) for audit,
+> remediation, meaningful release gates and staging acceptance. A green L4 run
+> alone is insufficient. Runtime fixes and evidence are recorded in the audit.
+
 Status: Active
 Date: 2026-08-23
 

@@ -108,7 +108,7 @@ class TestRunResume:
     def test_resume_dispatches(self, wired):
         config, engine = wired
         engine.resume_code = 0
-        assert cli.main(["resume", "--config", str(config)]) == 0
+        assert cli.main(["resume", "--force", "--config", str(config)]) == 0
 
     def test_concurrent_run_exits_3(self, wired, monkeypatch, capsys):
         from patchcycle.errors import LockHeldError

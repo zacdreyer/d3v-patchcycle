@@ -8,18 +8,16 @@ Implements: FR-01–FR-03, FR-05–FR-08, FR-12
 
 ## 1. Contract
 
-Every provider implements this interface (Python `Protocol`, in
-`providers/base.py`). All methods return result dataclasses; they never raise
-for *expected* operational failures (locks busy, PM error exit) — those are
-encoded in results. Exceptions indicate programmer error or unexpected I/O
-failure.
+Every provider implements the abstract `UpdateProvider` interface in
+`providers/base.py`. Operation methods return result dataclasses for ordinary
+failures. Discovery cannot encode an error as an empty update list: failed
+metadata/security/hold probes raise a domain `PreflightError`. Execution/I/O
+exceptions are caught by the engine and produce a failed cycle, never success.
 
 ```python
-class UpdateProvider(Protocol):
+class UpdateProvider(ABC):
     name: str  # "apt" | "dnf" | ... (lowercase, stable, logged)
 
-    @staticmethod
-    def supports(os_id: str, id_like: list[str]) -> bool: ...
     def preflight(self) -> PreflightResult: ...
     def refresh(self) -> RefreshResult: ...
     def list_updates(self, strategy: Strategy) -> list[UpdateInfo]: ...
@@ -66,8 +64,8 @@ class UpdateProvider(Protocol):
 
 ## 2. APT provider (V1)
 
-Applies to: `ID=debian`, `ID=ubuntu`, and any `ID_LIKE` containing `debian`
-**only after** explicit integration-test sign-off for that derivative.
+Release scope: Debian 12/13 and Ubuntu 22.04/24.04. Unlisted versions and
+derivatives require explicit integration-test sign-off before registration.
 
 ### Binary resolution & environment
 
@@ -87,7 +85,7 @@ Applies to: `ID=debian`, `ID=ubuntu`, and any `ID_LIKE` containing `debian`
    (Recovery behaviour is policy-gated; see failure-recovery.md FR-S3.
    PatchCycle never repairs unless `[updates].repair_interrupted = true`,
    and then only runs `dpkg --configure -a` — never removals.)
-3. Lock probe: non-blocking `flock` attempt on `/var/lib/dpkg/lock-frontend`
+3. Lock probe: non-blocking POSIX record lock (`fcntl.lockf`) on `/var/lib/dpkg/lock-frontend`
    and `/var/lib/apt/lists/lock`. Busy → `ok=False, kind=pm-locked`
    (engine waits/retries with timeout; never kills holders, never deletes
    lock files).
@@ -124,7 +122,7 @@ Invocation by strategy (all with `-y` and conffile policy options below):
 
 | Strategy | Command form |
 |---|---|
-| `security` | `apt-get install --only-upgrade <pkg…>` for security-classified updates only |
+| `security` | `apt-get install --only-upgrade <pkg=classified-version…>`; pin the classified security candidate so a later metadata refresh cannot select another version |
 | `safe` | `apt-get upgrade` |
 | `full` | `apt-get dist-upgrade` |
 
@@ -173,8 +171,8 @@ Behaviour:
 
 ## 3. DNF provider (V1.1)
 
-Applies to: `ID in {rhel, rocky, almalinux, fedora, centos}` or `ID_LIKE`
-containing `rhel` or `fedora`, **after** container integration tests pass.
+Release scope: Rocky Linux 9, AlmaLinux 9 and Fedora 44. RHEL, CentOS and
+ID_LIKE derivatives require their own passing acceptance gates before registration.
 
 ### Critical convention difference from APT
 
@@ -194,11 +192,10 @@ is per-provider; never share exit-code assumptions across providers.
    `kind=interrupted-transaction` with detail (no auto-repair; `dnf clean
    packages` + `dnf check` manual guidance; PatchCycle never runs
    `package-cleanup` surgery).
-3. Lock probe: non-blocking flock probe on `/var/cache/dnf/*/lock` is not
-   reliable across versions; instead preflight runs
-   `dnf -y check-update --quiet` with a short timeout and treats "Waiting for
-   process with pid X to finish" output as `kind=pm-locked` (engine waits/
-   retries per `lock_timeout`).
+3. Every DNF invocation uses `--setopt=exit_on_lock=True`. A native transaction
+   lock refusal (exit 200 or an explicit transaction-lock error) during preflight
+   becomes `kind=pm-locked`; the engine performs bounded polling and rechecks
+   immediately before apply. Native locking remains authoritative during apply.
 4. `pre_existing_reboot` via `reboot_required()` snapshot.
 
 ### refresh()

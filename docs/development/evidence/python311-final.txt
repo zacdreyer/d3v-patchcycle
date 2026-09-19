@@ -1,0 +1,8 @@
+﻿src/patchcycle/state_store.py               240      8     76      6    96%   110, 237-238, 338, 345, 385, 397, 400
+src/patchcycle/states.py                     30      0      6      0   100%
+src/patchcycle/subproc.py                    56      8     14      0    80%   79-85, 95-98
+src/patchcycle/window.py                     30      0     12      0   100%
+-------------------------------------------------------------------------------------
+TOTAL                                      2916    180    942    127    92%
+Required test coverage of 90.0% reached. Total coverage: 91.58%
+601 passed in 18.37s

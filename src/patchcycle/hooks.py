@@ -8,12 +8,12 @@ of the hook files themselves happens at config-check/install time.
 from __future__ import annotations
 
 import os
-import subprocess
 import time
 from collections.abc import Callable
 
 from patchcycle.config import HooksConfig
 from patchcycle.models import HookResult
+from patchcycle.subproc import CommandTimeout, run_argv
 
 #: Minimal, deterministic child environment (T3).
 _HOOK_ENV = {
@@ -65,17 +65,15 @@ class HookRunner:
     def _run_one(self, argv: tuple[str, ...]) -> HookResult:
         start = time.monotonic()
         try:
-            # S603: argv list, shell=False, scrubbed env; path validated.
-            proc = subprocess.run(  # noqa: S603
+            problems = validate_hook_paths((argv,))
+            if problems:
+                raise OSError("; ".join(problems))
+            proc = run_argv(
                 list(argv),
-                shell=False,
-                env=_HOOK_ENV,
-                capture_output=True,
-                text=True,
+                extra_env=_HOOK_ENV,
                 timeout=self.config.timeout_s,
-                check=False,
             )
-        except subprocess.TimeoutExpired:
+        except CommandTimeout:
             return HookResult(
                 hook=argv[0],
                 argv=argv,
@@ -97,8 +95,8 @@ class HookRunner:
         return HookResult(
             hook=argv[0],
             argv=argv,
-            exit_code=proc.returncode,
-            ok=proc.returncode == 0,
+            exit_code=proc.exit_code,
+            ok=proc.exit_code == 0,
             duration_s=time.monotonic() - start,
             stderr_tail=(proc.stderr or "")[-2000:],
         )
@@ -118,12 +116,16 @@ def _validate_hook_paths_posix(
     hooks: tuple[tuple[str, ...], ...],
 ) -> list[str]:  # pragma: no cover - exercised in Linux CI (L3)
     import stat
+    from pathlib import Path
+
+    from patchcycle.secure_io import check_ancestors
 
     problems: list[str] = []
     for argv in hooks:
         path = argv[0]
         try:
-            st = os.stat(path)
+            check_ancestors(Path(path))
+            st = os.lstat(path)
         except OSError as exc:
             problems.append(f"{path}: {exc}")
             continue
@@ -131,4 +133,6 @@ def _validate_hook_paths_posix(
             problems.append(f"{path}: not owned by root (uid={st.st_uid})")
         if st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
             problems.append(f"{path}: group/world-writable hooks are forbidden")
+        if not stat.S_ISREG(st.st_mode) or not os.access(path, os.X_OK):
+            problems.append(f"{path}: hook must be an executable regular file")
     return problems

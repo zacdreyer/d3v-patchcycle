@@ -71,7 +71,7 @@ PrivateTmp=true
 ProtectHome=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
-RestrictSUIDSGID=true
+RestrictSUIDSGID=false
 EnvironmentFile=-/etc/d3v-patchcycle/environment   # 0600, secrets live here
 ```
 
@@ -80,6 +80,12 @@ Deliberately **not** used (with rationale): `ProtectSystem=strict` and
 /var and load kernel modules via package scripts; `PrivateNetwork` — apt
 needs network. These trade-offs are recorded here so they are decisions,
 not omissions.
+
+`RestrictSUIDSGID=false` is explicit: native package managers must restore
+package-owned SUID files and SGID directories. The readiness VM reproduced
+`chmod` failing under `true`. Keeping that restriction would break legitimate
+updates; trust remains rooted in administrator-controlled repositories, package
+signatures and protected configuration/hooks. `NoNewPrivileges=true` remains.
 
 ## 6. Secret-handling practice (documented for operators)
 

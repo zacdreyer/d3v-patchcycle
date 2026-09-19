@@ -1,0 +1,135 @@
+* Creating isolated environment: venv+pip...
+* Installing packages in isolated environment:
+  - setuptools>=77
+* Getting build dependencies for wheel...
+running egg_info
+writing src/d3v_patchcycle.egg-info/PKG-INFO
+writing dependency_links to src/d3v_patchcycle.egg-info/dependency_links.txt
+writing entry points to src/d3v_patchcycle.egg-info/entry_points.txt
+writing requirements to src/d3v_patchcycle.egg-info/requires.txt
+writing top-level names to src/d3v_patchcycle.egg-info/top_level.txt
+reading manifest file 'src/d3v_patchcycle.egg-info/SOURCES.txt'
+adding license file 'LICENSE'
+writing manifest file 'src/d3v_patchcycle.egg-info/SOURCES.txt'
+* Installed build dependency versions:
+  - setuptools==84.0.0
+* Building wheel...
+running bdist_wheel
+running build
+running build_py
+creating build/lib/patchcycle
+copying src/patchcycle/cli.py -> build/lib/patchcycle
+copying src/patchcycle/logging_setup.py -> build/lib/patchcycle
+copying src/patchcycle/states.py -> build/lib/patchcycle
+copying src/patchcycle/reboot.py -> build/lib/patchcycle
+copying src/patchcycle/__main__.py -> build/lib/patchcycle
+copying src/patchcycle/state_store.py -> build/lib/patchcycle
+copying src/patchcycle/installer.py -> build/lib/patchcycle
+copying src/patchcycle/health.py -> build/lib/patchcycle
+copying src/patchcycle/errors.py -> build/lib/patchcycle
+copying src/patchcycle/models.py -> build/lib/patchcycle
+copying src/patchcycle/report.py -> build/lib/patchcycle
+copying src/patchcycle/__init__.py -> build/lib/patchcycle
+copying src/patchcycle/config.py -> build/lib/patchcycle
+copying src/patchcycle/osdetect.py -> build/lib/patchcycle
+copying src/patchcycle/engine.py -> build/lib/patchcycle
+copying src/patchcycle/lock.py -> build/lib/patchcycle
+copying src/patchcycle/hooks.py -> build/lib/patchcycle
+copying src/patchcycle/subproc.py -> build/lib/patchcycle
+copying src/patchcycle/secure_io.py -> build/lib/patchcycle
+copying src/patchcycle/window.py -> build/lib/patchcycle
+creating build/lib/patchcycle/providers
+copying src/patchcycle/providers/dnf.py -> build/lib/patchcycle/providers
+copying src/patchcycle/providers/__init__.py -> build/lib/patchcycle/providers
+copying src/patchcycle/providers/base.py -> build/lib/patchcycle/providers
+copying src/patchcycle/providers/apt.py -> build/lib/patchcycle/providers
+creating build/lib/patchcycle/notify
+copying src/patchcycle/notify/__init__.py -> build/lib/patchcycle/notify
+copying src/patchcycle/notify/smtp.py -> build/lib/patchcycle/notify
+copying src/patchcycle/notify/base.py -> build/lib/patchcycle/notify
+copying src/patchcycle/notify/webhook.py -> build/lib/patchcycle/notify
+running egg_info
+writing src/d3v_patchcycle.egg-info/PKG-INFO
+writing dependency_links to src/d3v_patchcycle.egg-info/dependency_links.txt
+writing entry points to src/d3v_patchcycle.egg-info/entry_points.txt
+writing requirements to src/d3v_patchcycle.egg-info/requires.txt
+writing top-level names to src/d3v_patchcycle.egg-info/top_level.txt
+reading manifest file 'src/d3v_patchcycle.egg-info/SOURCES.txt'
+adding license file 'LICENSE'
+writing manifest file 'src/d3v_patchcycle.egg-info/SOURCES.txt'
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/patchcycle
+copying build/lib/patchcycle/cli.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/logging_setup.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/states.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/reboot.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/__main__.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/state_store.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/installer.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/health.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/errors.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/models.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/report.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/__init__.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/config.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/osdetect.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/engine.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/lock.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/hooks.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/subproc.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+copying build/lib/patchcycle/secure_io.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+creating build/bdist.linux-x86_64/wheel/patchcycle/providers
+copying build/lib/patchcycle/providers/dnf.py -> build/bdist.linux-x86_64/wheel/./patchcycle/providers
+copying build/lib/patchcycle/providers/__init__.py -> build/bdist.linux-x86_64/wheel/./patchcycle/providers
+copying build/lib/patchcycle/providers/base.py -> build/bdist.linux-x86_64/wheel/./patchcycle/providers
+copying build/lib/patchcycle/providers/apt.py -> build/bdist.linux-x86_64/wheel/./patchcycle/providers
+copying build/lib/patchcycle/window.py -> build/bdist.linux-x86_64/wheel/./patchcycle
+creating build/bdist.linux-x86_64/wheel/patchcycle/notify
+copying build/lib/patchcycle/notify/__init__.py -> build/bdist.linux-x86_64/wheel/./patchcycle/notify
+copying build/lib/patchcycle/notify/smtp.py -> build/bdist.linux-x86_64/wheel/./patchcycle/notify
+copying build/lib/patchcycle/notify/base.py -> build/bdist.linux-x86_64/wheel/./patchcycle/notify
+copying build/lib/patchcycle/notify/webhook.py -> build/bdist.linux-x86_64/wheel/./patchcycle/notify
+running install_egg_info
+Copying src/d3v_patchcycle.egg-info to build/bdist.linux-x86_64/wheel/./d3v_patchcycle-1.0.0rc1-py3.13.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/d3v_patchcycle-1.0.0rc1.dist-info/WHEEL
+creating '/tmp/patchcycle-l4.mboZF3/artifacts/.tmp-2k00jthr/d3v_patchcycle-1.0.0rc1-py3-none-any.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'd3v_patchcycle-1.0.0rc1.dist-info/licenses/LICENSE'
+adding 'patchcycle/__init__.py'
+adding 'patchcycle/__main__.py'
+adding 'patchcycle/cli.py'
+adding 'patchcycle/config.py'
+adding 'patchcycle/engine.py'
+adding 'patchcycle/errors.py'
+adding 'patchcycle/health.py'
+adding 'patchcycle/hooks.py'
+adding 'patchcycle/installer.py'
+adding 'patchcycle/lock.py'
+adding 'patchcycle/logging_setup.py'
+adding 'patchcycle/models.py'
+adding 'patchcycle/osdetect.py'
+adding 'patchcycle/reboot.py'
+adding 'patchcycle/report.py'
+adding 'patchcycle/secure_io.py'
+adding 'patchcycle/state_store.py'
+adding 'patchcycle/states.py'
+adding 'patchcycle/subproc.py'
+adding 'patchcycle/window.py'
+adding 'patchcycle/notify/__init__.py'
+adding 'patchcycle/notify/base.py'
+adding 'patchcycle/notify/smtp.py'
+adding 'patchcycle/notify/webhook.py'
+adding 'patchcycle/providers/__init__.py'
+adding 'patchcycle/providers/apt.py'
+adding 'patchcycle/providers/base.py'
+adding 'patchcycle/providers/dnf.py'
+adding 'd3v_patchcycle-1.0.0rc1.dist-info/METADATA'
+adding 'd3v_patchcycle-1.0.0rc1.dist-info/WHEEL'
+adding 'd3v_patchcycle-1.0.0rc1.dist-info/entry_points.txt'
+adding 'd3v_patchcycle-1.0.0rc1.dist-info/top_level.txt'
+adding 'd3v_patchcycle-1.0.0rc1.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built d3v_patchcycle-1.0.0rc1-py3-none-any.whl
