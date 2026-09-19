@@ -1,0 +1,59 @@
+name: OS installer acceptance
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install (${{ matrix.platform }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:22.04
+            platform: ubuntu-22.04-x86_64
+            distro: ubuntu
+          - image: ubuntu:24.04
+            platform: ubuntu-24.04-x86_64
+            distro: ubuntu
+          - image: debian:12
+            platform: debian-12-x86_64
+            distro: debian
+          - image: debian:13
+            platform: debian-13-x86_64
+            distro: debian
+          - image: rockylinux:9
+            platform: rocky-9-x86_64
+            distro: rocky
+          - image: almalinux:9
+            platform: almalinux-9-x86_64
+            distro: almalinux
+          - image: fedora:44
+            platform: fedora-44-x86_64
+            distro: fedora
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-packages
+          path: artifacts
+      - name: Verify and extract OS bundle
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          cd artifacts
+          sha256sum --check SHA256SUMS.txt
+          mkdir "$RUNNER_TEMP/install-bundle"
+          unzip "$(find . -maxdepth 1 -name "*-$PLATFORM.zip" -print -quit)" -d "$RUNNER_TEMP/install-bundle"
+      - name: Exercise first install in disposable OS container
+        env:
+          IMAGE: ${{ matrix.image }}
+          DISTRO: ${{ matrix.distro }}
+        run: |
+          docker run --rm -v "$RUNNER_TEMP/install-bundle:/bundle:ro" \
+            -v "$PWD/tests/integration/install_bundle.sh:/test-install.sh:ro" \
+            "$IMAGE" bash /test-install.sh "$DISTRO"

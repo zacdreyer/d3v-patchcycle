@@ -77,6 +77,7 @@ class RebootController:
         *,
         now_iso: Callable[[], str],
         persist: Callable[[CycleState], None],
+        estimate_s: int = 0,
     ) -> CycleState:
         """Persist pre-reboot facts, verify the resume path, then reboot.
 
@@ -84,14 +85,20 @@ class RebootController:
         RebootError if the resume path is missing (FR-S15) or the reboot
         command fails after the retry budget (FR-S7).
         """
-        if not self.resume_path_ok():
-            raise RebootError(
-                "boot-resume service is not installed/enabled; refusing to reboot "
-                "without a recovery path (FR-S15). Run: d3v-patchcycle install"
-            )
         from dataclasses import replace
 
         while cycle.reboot_attempts < self.max_attempts:
+            if cycle.reboot_attempts:
+                decision = self.evaluate(
+                    reboot_required=cycle.reboot_required, estimate_s=estimate_s
+                )
+                if decision.action is not RebootAction.REBOOT:
+                    raise RebootError(f"reboot retry blocked: {decision.reason}")
+            if not self.resume_path_ok():
+                raise RebootError(
+                    "boot-resume service is not installed/enabled; refusing to reboot "
+                    "without a recovery path (FR-S15). Run: d3v-patchcycle install"
+                )
             cycle = replace(
                 cycle,
                 boot_id_before=self.boot_id_reader(),

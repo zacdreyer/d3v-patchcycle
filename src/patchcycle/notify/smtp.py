@@ -44,7 +44,8 @@ class SmtpNotifier(Notifier):
                 password = cfg.smtp_password
             if cfg.smtp_username and password:
                 smtp.login(cfg.smtp_username, password)
-            smtp.send_message(msg)
+            if smtp.send_message(msg):
+                return "failed:recipients-refused"
         except (OSError, smtplib.SMTPException) as exc:
             # Never include credentials or message content in the failure text.
             return f"failed:{type(exc).__name__}"

@@ -41,8 +41,9 @@ log "workdir: $WORK_DIR"
 
 python3 -m venv "$WORK_DIR/build-venv"
 "$WORK_DIR/build-venv/bin/pip" install --quiet build
-"$WORK_DIR/build-venv/bin/python" -m build --wheel --outdir "$WORK_DIR/artifacts" "$REPO_ROOT" > "$WORK_DIR/build.log" 2>&1
+"$WORK_DIR/build-venv/bin/python" -m build --outdir "$WORK_DIR/artifacts" "$REPO_ROOT" > "$WORK_DIR/build.log" 2>&1
 sha256sum "$WORK_DIR"/artifacts/*.whl > "$WORK_DIR/artifact-sha256.txt"
+"$WORK_DIR/build-venv/bin/python" "$REPO_ROOT/tools/package_bundle.py" "$WORK_DIR/artifacts" >> "$WORK_DIR/build.log"
 
 # SSH keypair for cloud-init -> guest access.
 ssh-keygen -q -t ed25519 -N "" -f "$WORK_DIR/id_ed25519"
@@ -101,9 +102,11 @@ $SSH "sudo cloud-init status --wait" > "$WORK_DIR/cloud-init.log" 2>&1
 log "VM up; installing PatchCycle"
 
 # Install the built artifact, not an editable source checkout.
-tar -C "$WORK_DIR/artifacts" -cf - . | \
+BUNDLE_DIR=$(find "$WORK_DIR/artifacts" -maxdepth 1 -type d -name "*-debian-13-x86_64" -print -quit)
+tar -C "$BUNDLE_DIR" -cf - . | \
     $SSH "mkdir -p /tmp/pc && tar -C /tmp/pc -xf -"
-$SSH "sudo python3 -m venv /opt/pc-venv && sudo /opt/pc-venv/bin/pip install --quiet /tmp/pc/*.whl"
+$SSH "cd /tmp/pc && sha256sum --check SHA256SUMS.txt && sudo bash install-debian.sh" > "$WORK_DIR/installer.log" 2>&1
+$SSH "sudo /usr/local/bin/d3v-patchcycle status && test ! -e /etc/systemd/system/d3v-patchcycle.timer" >> "$WORK_DIR/installer.log" 2>&1
 $SSH "sudo tee /opt/pc-sink.py >/dev/null" < "$REPO_ROOT/tests/vm/webhook_sink.py"
 
 # SSH polling is an intentional active session in this disposable guest.
@@ -135,7 +138,7 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 $SSH "sudo systemctl daemon-reload && sudo systemctl enable --now patchcycle-l4-sink.service"
-$SSH "sudo /opt/pc-venv/bin/d3v-patchcycle install"
+$SSH "sudo /opt/d3v-patchcycle/venv/bin/d3v-patchcycle install"
 $SSH "systemctl is-enabled d3v-patchcycle-resume.service | grep -q enabled"
 log "resume unit enabled"
 
@@ -197,6 +200,6 @@ VERIFY=verify
 [[ "$POWER_CUT" != 1 ]] || VERIFY=verify-power-cut
 $SSH "sudo python3 /opt/pc-fixture.py $VERIFY" > "$WORK_DIR/package-verify.log" 2>&1
 $SSH "sudo python3 /opt/pc-fixture.py verify-archive" > "$WORK_DIR/archive-verify.log" 2>&1
-$SSH "sudo /opt/pc-venv/bin/d3v-patchcycle config-check && sudo /opt/pc-venv/bin/d3v-patchcycle status && sudo /opt/pc-venv/bin/d3v-patchcycle history && sudo /opt/pc-venv/bin/d3v-patchcycle install && sudo /opt/pc-venv/bin/d3v-patchcycle uninstall && sudo test -f /etc/d3v-patchcycle/config.toml && sudo test -d /var/lib/d3v-patchcycle/history && sudo /opt/pc-venv/bin/d3v-patchcycle install" > "$WORK_DIR/operator-smoke.log" 2>&1
+$SSH "sudo /opt/d3v-patchcycle/venv/bin/d3v-patchcycle config-check && sudo /opt/d3v-patchcycle/venv/bin/d3v-patchcycle status && sudo /opt/d3v-patchcycle/venv/bin/d3v-patchcycle history && sudo /opt/d3v-patchcycle/venv/bin/d3v-patchcycle install && sudo /opt/d3v-patchcycle/venv/bin/d3v-patchcycle uninstall && sudo test -f /etc/d3v-patchcycle/config.toml && sudo test -d /var/lib/d3v-patchcycle/history && sudo /opt/d3v-patchcycle/venv/bin/d3v-patchcycle install" > "$WORK_DIR/operator-smoke.log" 2>&1
 log "PASS: full reboot/resume cycle verified"
 kill "$VM_PID" 2>/dev/null || true

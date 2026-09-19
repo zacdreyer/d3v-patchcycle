@@ -1,8 +1,8 @@
 # d3v-patchcycle
 
-> **Release candidate 1.0.0rc2 (2026-09-08): local acceptance passed.**
-> Audit fixes, seven-distribution integration tests and normal/power-loss VM
-> recovery are verified. Stable approval requires final-commit CI and target-host
+> **Release candidate 1.0.0rc2.**
+> Release gates cover unit tests, seven OS installer/provider targets, and
+> Debian normal/power-loss VM recovery. Stable approval also requires target-host
 > staging. Follow the [readiness checklist](docs/development/production-readiness.md).
 
 D3V PatchCycle is a lightweight, stateful server maintenance utility that
@@ -55,66 +55,32 @@ planned (Phase 8 remainder).
 
 ## Installation
 
-### Requirements
+Start with the **[step-by-step installation guide](INSTALL.md)**. It covers
+verified downloads, prerequisites for each supported OS, first-run checks,
+scheduling, notification secrets, upgrades, and removal.
 
-- A supported Linux system (see table) with **systemd**
-- **Python 3.11+** (`python3 --version`)
-- root (PatchCycle manages packages and reboots)
-
-Ubuntu 22.04 ships Python 3.10 and requires a separately provisioned Python
-3.11+ interpreter approved for your environment. Rocky/AlmaLinux 9 can install
-`python3.11` and `python3.11-pip` from their repositories. On those hosts, use
-`python3.11 -m venv` in place of `python3 -m venv` below. Ubuntu 24.04,
-Debian 12/13 and Fedora 44 have a suitable distribution Python; ensure its
-venv support is installed. Do not replace the distribution's system Python.
-
-### Option A — pip (recommended)
+Release assets include a checksummed ZIP for each supported OS/version, with
+an OS-specific installation script and the Python wheel. Extract the matching
+bundle, verify its checksums, and run its installer with sudo. For Debian:
 
 ```bash
-# From a downloaded release wheel/zip on this repo's Releases page:
-python3 -c 'import sys; assert sys.version_info >= (3, 11), "Python 3.11+ required"'
-sudo python3 -m venv /opt/d3v-patchcycle/venv
-sudo /opt/d3v-patchcycle/venv/bin/pip install ./d3v_patchcycle-1.0.0rc2-py3-none-any.whl
-sudo ln -s /opt/d3v-patchcycle/venv/bin/d3v-patchcycle /usr/local/bin/d3v-patchcycle
-
-# Install into this dedicated environment; distribution Python may be externally managed.
+sha256sum --check SHA256SUMS.txt &&
+sudo bash install-debian.sh
 ```
 
-### Option B — from source
+Use `install-ubuntu.sh`, `install-rocky.sh`, `install-almalinux.sh`, or
+`install-fedora.sh` on those systems. Ubuntu 22.04 requires an approved Python
+3.11+ with venv support first; the installer does not add a third-party repository.
 
-```bash
-git clone https://github.com/zacdreyer/d3v-patchcycle.git
-cd d3v-patchcycle
-sudo python3 -m venv /opt/d3v-patchcycle/venv
-sudo /opt/d3v-patchcycle/venv/bin/pip install .
-sudo ln -s /opt/d3v-patchcycle/venv/bin/d3v-patchcycle /usr/local/bin/d3v-patchcycle
-```
+The scripts create a dedicated `/opt/d3v-patchcycle/venv` and install host
+integration. **Maintenance is initially disabled and manual, with notify-only
+reboot policy.** Follow [INSTALL.md](INSTALL.md) to preview updates, configure
+notifications and health checks, run a controlled first cycle, then enable a
+schedule. Existing installations are refused; use the guide's upgrade procedure.
 
-### Install host integration (systemd units + config + state dirs)
-
-```bash
-sudo d3v-patchcycle install
-```
-
-This is idempotent and safe to re-run. It:
-
-- writes `/etc/d3v-patchcycle/config.toml` (0600 root:root) **only if absent**
-  (an existing config is never overwritten; the new default lands in
-  `config.toml.new` for you to merge);
-- creates `/var/lib/d3v-patchcycle/` (0700) + `history/`;
-- installs + validates (`systemd-analyze`) three units:
-  - `d3v-patchcycle.timer` — the schedule,
-  - `d3v-patchcycle.service` — the run,
-  - `d3v-patchcycle-resume.service` — post-reboot continuation (always on);
-- enables the resume service and the timer (`enable --now`).
-
-Verify:
-
-```bash
-sudo d3v-patchcycle config-check   # root-owned 0600 configuration
-d3v-patchcycle detect         # confirm OS + provider support
-sudo d3v-patchcycle run --dry-run  # refresh metadata and plan; no package changes
-```
+Before a tagged release exists, the same bundles are downloadable from the
+successful CI/Release run's `release-packages` artifact on GitHub Actions.
+They are candidate artifacts, not a stable release.
 
 ---
 
@@ -236,7 +202,7 @@ sudo systemctl daemon-reload
 ### Scheduling
 
 ```bash
-d3v-patchcycle schedule           # show the effective schedule (OnCalendar)
+sudo d3v-patchcycle schedule      # show the effective schedule (OnCalendar)
 sudo d3v-patchcycle install       # (re)apply after editing [maintenance]
 systemctl list-timers d3v-patchcycle.timer   # next run
 ```
@@ -274,22 +240,19 @@ Read results:
   (every record carries a `run_id`)
 - **State**: `d3v-patchcycle status`
 
-## Update PatchCycle itself
+## Upgrade or uninstall
+
+Follow [INSTALL.md](INSTALL.md) for the complete upgrade procedure, including
+pausing the timer, checking for a pending cycle, and installing the verified
+wheel into the dedicated virtual environment. Do not use system-wide `sudo pip`.
 
 ```bash
-sudo python3 -m pip install --upgrade d3v-patchcycle
-sudo d3v-patchcycle install      # re-render units if the defaults changed
+sudo d3v-patchcycle uninstall           # preserves config and history
+sudo d3v-patchcycle uninstall --purge   # deletes config and state/history
 ```
 
-Your config, state, history, and logs are preserved across upgrades.
-
-## Uninstall
-
-```bash
-sudo d3v-patchcycle uninstall           # removes units; keeps config/state/history
-sudo d3v-patchcycle uninstall --purge   # also removes config, state, history, logs
-sudo python3 -m pip uninstall d3v-patchcycle
-```
+Purge retains the installed Python environment, external logs, and environment
+secret file. Configuration and history are preserved during normal upgrades.
 
 ---
 
@@ -331,7 +294,7 @@ See the [implementation plan](docs/development/implementation-plan.md).
 
 ```bash
 pip install -e .[dev]
-pytest                          # test suite
+python -m pytest                # test suite
 ruff check src tests            # lint
 mypy --strict -p patchcycle     # types
 pytest -m container tests/integration   # L3 container matrix (needs Docker)

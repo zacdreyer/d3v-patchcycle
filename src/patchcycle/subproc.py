@@ -64,6 +64,8 @@ def run_argv(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         start_new_session=True,
     )
     try:

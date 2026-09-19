@@ -178,7 +178,7 @@ lock_file = "/run/d3v-patchcycle/lock"
 | Check | Keys | Semantics |
 |---|---|---|
 | `service` | `name`, `timeout`, `critical` | Bounded `systemctl is-active --quiet <name>` (name validated: `[a-zA-Z0-9:_.@-]+`, suffix optional) |
-| `http` | `url`, `expected_status`, `timeout`, `critical` | GET via stdlib urllib; status must equal expected |
+| `http` | `url`, `expected_status`, `timeout`, `critical` | Direct GET via stdlib urllib; no environment proxy or redirects; original status must equal expected |
 | `tcp` | `host`, `port`, `timeout`, `critical` | connect succeeds |
 | `command` | `argv`, `timeout`, `critical` | exit 0; no shell; same path validation as hooks |
 

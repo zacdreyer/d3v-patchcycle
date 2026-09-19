@@ -26,9 +26,9 @@ LOGGER_NAME = "patchcycle"
 
 
 def redact_text(value: str, secrets: Sequence[str]) -> str:
-    for secret in secrets:
-        if secret:
-            value = value.replace(secret, "***REDACTED***")
+    patterns = sorted({secret for secret in secrets if secret}, key=len, reverse=True)
+    if patterns:
+        value = re.sub("|".join(re.escape(secret) for secret in patterns), "***REDACTED***", value)
     return re.sub(r"(https?://)[^\s/@]+:[^\s/@]+@", r"\1***REDACTED***@", value)
 
 
