@@ -11,9 +11,9 @@ notify admin. Local-only, no daemon, no listeners, no DB. Governing
 principle: *a clearly-reported failure beats a guessed/forced success.*
 
 **Pre-release working tree: 1.0.0rc2, state schema v2. NOT production ready.** Local audit remediation and acceptance tests passed. Final artifacts,
-committed live CI and target-host staging govern stable release approval.
+Live CI/release gates passed; target-host staging still governs stable release approval.
 
-## Current status (2026-09-09)
+## Current status (2026-09-19)
 
 - CI follow-up (2026-09-19): live rc2 Linux CI/release runs failed 11 hook/
   command-health tests because the hosted Python tool-cache ancestry is
@@ -22,12 +22,14 @@ committed live CI and target-host staging govern stable release approval.
   trust checks are unchanged. Reproduced 11 failures with non-root-owned
   interpreter ancestry in a disposable container; after the fix, Python 3.13
   passed 602 tests with 91.63% coverage and static/doc checks passed. Live
-  gates on this follow-up commit remain pending.
+  gates passed on `f3dbbef`: CI run 35463221859 and Release run 35463221935
+  (normal reboot and power-cut scenarios both green; publishing skipped).
 - User authorized execution through production readiness, including code, tests,
   SDD/TDD and memory changes. Continue the existing audit; do not restart it.
 - Baseline is `1c98c9e`. Candidate **1.0.0rc2 / schema 2** is prepared on
   `release/1.0.0rc2-readiness`; CI/release gates run on release-branch pushes.
-  No stable release, tag, deployment or live GitHub CI result has been verified.
+  Live GitHub gates are now verified above. No stable release, tag or
+  deployment has been performed.
 - The source audit reviewed all production modules and found 25 initial grouped
   issues, followed by additional native/systemd failures. Implemented fixes cover
   durable reboot facts/retries/verified boot identity; reboot-first and recovery;
@@ -66,7 +68,7 @@ committed live CI and target-host staging govern stable release approval.
   `patchcycle-readiness-audit` mounts this workspace read-only at /source;
   /candidate is the final writable source snapshot. No host PM/reboot commands were run.
 - Remaining work is tracked in docs/development/production-readiness.md and
-  docs/development/code-audit.md. Do not label staging or live CI verified.
+  docs/development/code-audit.md. Deployment-target staging remains unverified.
 
 The notes below preserve historical context. Locked decisions and architecture
 state requirements; the audit must verify enforcement. The checklist overrides

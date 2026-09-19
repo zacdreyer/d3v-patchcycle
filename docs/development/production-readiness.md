@@ -1,8 +1,8 @@
 # Production readiness checklist
 
-Updated: 2026-09-09. Candidate: **1.0.0rc2 / state schema 2**.
+Updated: 2026-09-19. Candidate: **1.0.0rc2 / state schema 2**.
 Baseline: `1c98c9e`; branch: `release/1.0.0rc2-readiness`.
-**Local engineering gates passed; release acceptance is pending.**
+**Local and live GitHub engineering gates passed; deployment-target acceptance is pending.**
 
 CI follow-up, 2026-09-19: the September 8 rc2 CI and release runs failed
 11 Linux hook/command-health tests because GitHub's tool-cache interpreter
@@ -11,7 +11,10 @@ removes that environment assumption without weakening production checks.
 The same 11 failures were reproduced with non-root-owned interpreter ancestry
 in a disposable container; the corrected Python 3.13 suite passed 602 tests
 at 91.63% coverage. Ruff, formatting, strict mypy, CI guard and documentation
-links passed. Live CI and release gates for this follow-up are pending.
+links passed. On commit `f3dbbef`, all 17 [CI jobs](https://github.com/zacdreyer/d3v-patchcycle/actions/runs/35463221859)
+passed, and the [release gates](https://github.com/zacdreyer/d3v-patchcycle/actions/runs/35463221935)
+passed through both real-VM scenarios (normal reboot and power loss during
+upgrade). Publishing was skipped because this was a release-branch push.
 
 This is the active work queue. The [audit](code-audit.md) preserves original
 findings and reproductions; historical phase completion is not release proof.
@@ -76,10 +79,11 @@ findings and reproductions; historical phase completion is not release proof.
   version and representative disposable staging host(s). Exercise the intended
   schedules, real application health probes and actual notification destination
   across maintenance/reboot cycles. The synthetic Debian VM is not fleet acceptance.
-- [ ] **REL-01 — Commit and live CI:** run repository CI and release workflow in
-  gate-only mode on the final reviewed commit (both run on release-branch push;
-  publication still requires a tag). Windows 3.11/3.12/3.14 CI results
-  have not been observed locally. Retain run URLs and artifacts.
+- [x] **REL-01 — Commit and live CI:** commit `f3dbbef` passed repository CI
+  (Python 3.11–3.14 on Linux and Windows, seven container targets, package
+  build and quality checks) and the release workflow through both L4 VM gates.
+  Run URLs are recorded above; the release run retains L4 evidence artifacts.
+  Publication still requires a tag and separate stable-release acceptance.
 - [ ] **REL-02 — Stable release:** after engineering and staging gates close,
   reconcile version/changelog/memory and authorize the v1.0.0 tag/publication.
   No release has been published or deployment performed in this session.
