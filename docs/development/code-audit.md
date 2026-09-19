@@ -1,5 +1,9 @@
 # Production readiness audit
 
+Follow-up: [September 19 security and correctness review](security-review-2026-09-19.md).
+The evidence below is the historical September 8 audit; current release-gate
+status is recorded in [production readiness](production-readiness.md).
+
 Baseline: `1c98c9e`, 2026-09-08. Status: active; release blocked.
 
 ## Current execution evidence

@@ -195,6 +195,7 @@ class AptProvider(UpdateProvider):
         updates = getattr(config, "updates", None)
         pm = getattr(config, "package_manager", None)
         if updates is not None:
+            self._strategy = updates.strategy
             self._conf_policy = updates.config_files_policy
         if pm is not None:
             self._refresh_timeout = pm.refresh_timeout_s

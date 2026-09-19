@@ -90,7 +90,9 @@ Recovery entry points:
 - **Meaning:** `systemctl reboot` returned success but the machine never went
   down (or the resume service is being run on the same boot).
 - **Recovery:** retry budget persisted in state (`reboot_attempts`, max 3,
-  30s apart); on exhaustion → FAILED `kind=reboot-failed`,
+  30s apart). Each retry rechecks users, policy, the maintenance window
+  (including the verification estimate), and the enabled resume service;
+  if a safety check blocks, no further reboot command is issued. On exhaustion → FAILED `kind=reboot-failed`,
   `manual_intervention=true`, notify. Also covers "reboot hangs": if
   `REBOOTING` persists with same boot beyond `reboot_stuck_timeout`
   (default 10m from `reboot_initiated_at`), same failure path.

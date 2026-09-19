@@ -10,6 +10,7 @@ import json
 import socket
 import subprocess
 import time
+import urllib.error
 import urllib.request
 from collections.abc import Callable
 
@@ -104,12 +105,19 @@ def _default_service_active(name: str, timeout: float = 10) -> tuple[bool, str]:
     return proc.returncode == 0, proc.stdout.strip()
 
 
+class _NoHealthRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
+
+
 def _default_http_get(url: str, timeout: float) -> tuple[int, str]:
     resp = None
     try:
-        resp = urllib.request.urlopen(url, timeout=timeout)  # noqa: S310
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoHealthRedirect())
+        resp = opener.open(url, timeout=timeout)
         return resp.status, ""
     except urllib.error.HTTPError as exc:
+        exc.close()
         return exc.code, str(exc)
     except Exception as exc:
         return 0, str(exc)

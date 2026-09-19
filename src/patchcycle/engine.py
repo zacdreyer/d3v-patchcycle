@@ -401,7 +401,12 @@ class CycleEngine:
         )
         if decision.action is not RebootAction.REBOOT:
             raise PreflightError(f"reboot blocked before command: {decision.reason}")
-        cycle = self.reboot.prepare_and_reboot(cycle, now_iso=self.now_iso, persist=self.store.save)
+        cycle = self.reboot.prepare_and_reboot(
+            cycle,
+            now_iso=self.now_iso,
+            persist=self.store.save,
+            estimate_s=self.config.maintenance.estimates.reboot_verify_s,
+        )
         # Production: the machine goes down here and the resume service
         # continues. Tests/simulation: rebooter returns after flipping the
         # boot id, and we continue in-process through the same code path.
@@ -552,12 +557,15 @@ class CycleEngine:
         if cycle.state is State.REBOOTING:
             return self._reboot_never_happened(cycle)
         if cycle.state in (
+            State.CHECKING_REBOOT,
+            State.REBOOT_PENDING,
             State.POST_REBOOT,
             State.VERIFYING,
             State.HEALTH_CHECKING,
             State.NOTIFYING,
         ):
-            # Same boot, idempotent post-reboot states: continue in place.
+            # Same boot: repeat policy checks or post-upgrade verification
+            # without restarting the completed package transaction.
             return self._drive(cycle)
         # FR-S1/S2: early states restart cleanly at PRECHECK with the same
         # run_id. PRECHECK re-runs the provider preflight, which catches an

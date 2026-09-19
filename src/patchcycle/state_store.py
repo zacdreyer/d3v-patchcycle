@@ -18,7 +18,7 @@ from typing import Any
 
 from patchcycle import STATE_SCHEMA_VERSION
 from patchcycle.errors import StateError
-from patchcycle.models import ErrorInfo, HealthResult, UpdateInfo
+from patchcycle.models import ErrorInfo, HealthResult, Outcome, UpdateInfo
 from patchcycle.secure_io import check_directory, check_file, read_private
 from patchcycle.states import State
 
@@ -323,9 +323,7 @@ def _validate_schema(data: dict[str, Any]) -> None:
     ):
         if key in data and type(data[key]) is not bool:
             raise StateError(f"{key}: expected boolean")
-    for key in ("packages_pending", "packages_updated", "reboot_attempts", "outstanding_updates"):
-        if key in data and data[key] is not None and (type(data[key]) is not int or data[key] < 0):
-            raise StateError(f"{key}: expected non-negative integer")
+    _validate_counters(data)
     for key in ("host", "os", "notification_status"):
         value = data.get(key, {})
         if not isinstance(value, dict) or not all(isinstance(v, str) for v in value.values()):
@@ -339,7 +337,20 @@ def _validate_schema(data: dict[str, Any]) -> None:
     _validate_recovery_values(data)
 
 
+def _validate_counters(data: dict[str, Any]) -> None:
+    for key in ("packages_pending", "packages_updated", "reboot_attempts", "outstanding_updates"):
+        if key == "outstanding_updates" and data.get(key) is None:
+            continue
+        if key in data and (type(data[key]) is not int or data[key] < 0):
+            raise StateError(f"{key}: expected non-negative integer")
+
+
 def _validate_recovery_values(data: dict[str, Any]) -> None:
+    if data.get("outcome") is not None:
+        try:
+            Outcome(data["outcome"])
+        except (ValueError, TypeError) as exc:
+            raise StateError("outcome: invalid cycle outcome") from exc
     for key in ("state", "started_at", "updated_at", "provider", "kernel_before"):
         if key in data and not isinstance(data[key], str):
             raise StateError(f"{key}: expected string")
@@ -380,13 +391,20 @@ def _validate_nested_records(data: dict[str, Any]) -> None:
         )
     for item in data.get("health_results", []):
         _validate_record(item, ("kind", "name", "detail"), ("ok", "critical"))
-        duration = item.get("duration_s", 0)
-        if type(duration) not in (int, float) or not math.isfinite(duration) or duration < 0:
-            raise StateError("health duration must be finite and non-negative")
+        _validate_duration(item.get("duration_s", 0))
     for item in data.get("transitions", []):
         _validate_record(item, ("from", "to", "at"), ())
     if data.get("error"):
         _validate_record(data["error"], ("kind", "message", "stage"), ("manual_intervention",))
+
+
+def _validate_duration(duration: Any) -> None:
+    try:
+        valid = type(duration) in (int, float) and math.isfinite(duration) and duration >= 0
+    except OverflowError:
+        valid = False
+    if not valid:
+        raise StateError("health duration must be finite and non-negative")
 
 
 def _validate_record(

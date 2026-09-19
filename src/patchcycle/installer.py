@@ -359,6 +359,8 @@ class Installer:
         if target.exists():
             check_file(target)
             reference = target.with_name(f"{target.name}.new")
+            if reference.exists() or reference.is_symlink():
+                check_file(reference)
             if not reference.exists() or reference.read_text() != DEFAULT_CONFIG_TEMPLATE:
                 _secure_write(reference, DEFAULT_CONFIG_TEMPLATE, mode=0o600)
                 changed.append(str(reference))
@@ -379,6 +381,8 @@ class Installer:
         self.unit_dir.mkdir(parents=True, exist_ok=True)
         check_directory(self.unit_dir)
         target = self.unit_dir / name
+        if target.exists() or target.is_symlink():
+            check_file(target, private=False)
         if target.exists() and target.read_text() == content:
             return  # idempotent: nothing to do
         _secure_write(target, content, mode=0o644)

@@ -13,7 +13,25 @@ principle: *a clearly-reported failure beats a guessed/forced success.*
 **Pre-release working tree: 1.0.0rc2, state schema v2. NOT production ready.** Local audit remediation and acceptance tests passed. Final artifacts,
 Live CI/release gates passed; target-host staging still governs stable release approval.
 
-## Current status (2026-09-19)
+## Current status (2026-09-20)
+
+- Release/installation follow-up: OS bundles for all seven supported targets,
+  family-specific first-install scripts, and INSTALL.md added. Installer leaves
+  maintenance disabled/manual with notify-only reboot policy. Ubuntu 22.04
+  requires an approved separately provisioned Python 3.11+; no automatic PPA.
+  CI and Release now test generated bundles on seven OS images; Debian L4 uses
+  the shipped installer. Tag publishing reuses the tested artifact, with job-only
+  write permission. Branch pushes upload candidate bundles without publishing.
+  Local revalidation: 626 passed, 92.06% coverage; Ruff/types/build/Twine/audit,
+  workflow syntax, shell syntax, CI guard and documentation checks passed.
+  Live checks will run on release/security-installers after push.
+
+- Security/correctness follow-up on merged main `9f3ca36`: nine finding groups
+  corrected locally; 21 regression cases added. Python 3.13: 623 passed,
+  92.06% coverage; static checks pass. See
+  [review](docs/development/security-review-2026-09-19.md). Changes are now
+  validated for commit with release/installer follow-up below; earlier live CI/VM
+  results predate these changes.
 
 - CI follow-up (2026-09-19): live rc2 Linux CI/release runs failed 11 hook/
   command-health tests because the hosted Python tool-cache ancestry is
