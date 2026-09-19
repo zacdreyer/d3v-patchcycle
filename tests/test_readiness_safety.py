@@ -184,16 +184,31 @@ def test_incomplete_health_or_credential_url_is_config_error(tmp_path, body):
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX executable ancestry")
-def test_hook_under_writable_parent_is_refused(tmp_path):
-    from patchcycle.hooks import validate_hook_paths
+@pytest.mark.parametrize("unsafe", ["writable", "non-root-owned"])
+def test_hook_under_untrusted_parent_is_not_executed(tmp_path, unsafe):
+    from patchcycle.config import HooksConfig
+    from patchcycle.health import _default_run_command
+    from patchcycle.hooks import HookRunner, validate_hook_paths
 
-    parent = tmp_path / "writable"
+    parent = tmp_path / "untrusted"
     parent.mkdir()
-    parent.chmod(0o777)
+    marker = tmp_path / "executed"
     script = parent / "hook"
-    script.write_text("#!/bin/sh\nexit 0\n")
+    script.write_text(f"#!/bin/sh\ntouch '{marker}'\n")
     script.chmod(0o755)
-    assert validate_hook_paths(((str(script),),))
+    if unsafe == "writable":
+        parent.chmod(0o777)
+    else:
+        os.chown(parent, 65534, 65534)
+    argv = (str(script),)
+    assert validate_hook_paths((argv,))
+    result = HookRunner(HooksConfig()).run_all((argv,), "before_upgrade")[0]
+    assert not result.ok
+    assert "untrusted parent directory" in result.stderr_tail
+    code, detail = _default_run_command(argv, 5)
+    assert code == -1
+    assert "untrusted parent directory" in detail
+    assert not marker.exists()
 
 
 def test_legacy_state_migrates_without_inventing_boot_proof():

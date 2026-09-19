@@ -4,6 +4,15 @@ Updated: 2026-09-09. Candidate: **1.0.0rc2 / state schema 2**.
 Baseline: `1c98c9e`; branch: `release/1.0.0rc2-readiness`.
 **Local engineering gates passed; release acceptance is pending.**
 
+CI follow-up, 2026-09-19: the September 8 rc2 CI and release runs failed
+11 Linux hook/command-health tests because GitHub's tool-cache interpreter
+has untrusted parent directories. A validated system-Python test fixture
+removes that environment assumption without weakening production checks.
+The same 11 failures were reproduced with non-root-owned interpreter ancestry
+in a disposable container; the corrected Python 3.13 suite passed 602 tests
+at 91.63% coverage. Ruff, formatting, strict mypy, CI guard and documentation
+links passed. Live CI and release gates for this follow-up are pending.
+
 This is the active work queue. The [audit](code-audit.md) preserves original
 findings and reproductions; historical phase completion is not release proof.
 

@@ -2,17 +2,10 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 
 from patchcycle.config import HooksConfig
 from patchcycle.hooks import HOOK_CLASSIFICATION, HookRunner, classify_hooks
-
-
-def py_hook(code: str) -> tuple[str, ...]:
-    return (str(Path(sys.executable).resolve()), "-c", code)
 
 
 class TestClassification:
@@ -70,20 +63,20 @@ class TestFailurePolicyMatrix:
             ("after_reboot", False),
         ],
     )
-    def test_default_policy_per_point(self, point, abort_default):
+    def test_default_policy_per_point(self, point, abort_default, py_hook):
         runner = HookRunner(HooksConfig(failure_policy="abort"))
         failed = runner.run_all((py_hook("import sys; sys.exit(1)"),), point)
         assert runner.should_abort(failed, point) is abort_default
 
     @pytest.mark.parametrize("point", ["before_upgrade", "before_reboot"])
-    def test_continue_policy_overrides_before_points(self, point):
+    def test_continue_policy_overrides_before_points(self, point, py_hook):
         runner = HookRunner(HooksConfig(failure_policy="continue"))
         failed = runner.run_all((py_hook("import sys; sys.exit(1)"),), point)
         assert runner.should_abort(failed, point) is False
 
-    def test_hook_results_logged_with_run_context(self, tmp_path, caplog):
+    def test_hook_results_logged_with_run_context(self, tmp_path, caplog, py_hook, trusted_python):
         """Hook results carry point + exit code for the cycle log."""
         runner = HookRunner(HooksConfig())
         results = runner.run_all((py_hook("print('out')"),), "before_upgrade")
         assert results[0].ok is True
-        assert results[0].hook == str(Path(sys.executable).resolve())
+        assert results[0].hook == trusted_python

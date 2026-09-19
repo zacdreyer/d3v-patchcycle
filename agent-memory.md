@@ -15,6 +15,14 @@ committed live CI and target-host staging govern stable release approval.
 
 ## Current status (2026-09-09)
 
+- CI follow-up (2026-09-19): live rc2 Linux CI/release runs failed 11 hook/
+  command-health tests because the hosted Python tool-cache ancestry is
+  untrusted. Tests now use a validated system-Python fixture for those child
+  commands; application/pytest remain on the matrix interpreter. Production
+  trust checks are unchanged. Reproduced 11 failures with non-root-owned
+  interpreter ancestry in a disposable container; after the fix, Python 3.13
+  passed 602 tests with 91.63% coverage and static/doc checks passed. Live
+  gates on this follow-up commit remain pending.
 - User authorized execution through production readiness, including code, tests,
   SDD/TDD and memory changes. Continue the existing audit; do not restart it.
 - Baseline is `1c98c9e`. Candidate **1.0.0rc2 / schema 2** is prepared on

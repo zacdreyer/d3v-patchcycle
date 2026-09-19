@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 from patchcycle.config import HealthCheckConfig
 from patchcycle.health import HealthCheckRunner
 
@@ -60,19 +57,19 @@ class TestCheckKinds:
         assert results[0].ok is False
         assert "exploded" in results[0].detail
 
-    def test_real_command_check(self):
+    def test_real_command_check(self, trusted_python):
         runner = HealthCheckRunner(failed_units=lambda: (0, ""))
         ok_check = HealthCheckConfig(
             "command",
             critical=True,
             name="true",
-            argv=(str(Path(sys.executable).resolve()), "-c", "pass"),
+            argv=(trusted_python, "-c", "pass"),
         )
         bad_check = HealthCheckConfig(
             "command",
             critical=True,
             name="false",
-            argv=(str(Path(sys.executable).resolve()), "-c", "import sys; sys.exit(1)"),
+            argv=(trusted_python, "-c", "import sys; sys.exit(1)"),
         )
         results = runner.run((ok_check, bad_check))
         assert results[0].ok is True

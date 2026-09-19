@@ -150,6 +150,17 @@ package names into logs.
 
 ## 4. Coverage & quality gates (CI)
 
+Linux unit tests run as root to exercise privileged file checks. Tests that
+execute real hooks or command health checks use the resolved system
+`/usr/bin/python3` through a shared `trusted_python` fixture. The application
+and pytest still run under the selected matrix interpreter. GitHub's hosted
+tool-cache interpreter can have non-root-owned or writable ancestors and
+must not be treated as a trusted hook merely because pytest runs as root.
+On Windows the fixture uses the current interpreter (POSIX ownership rules
+do not apply). The fixture validates its executable with the production path
+validator; unsafe fixtures fail setup. Dedicated negative tests continue to
+prove that unsafe executable ancestry prevents execution.
+
 - `ruff check` + `ruff format --check` — clean.
 - `mypy --strict` on `src/patchcycle` — clean.
 - pytest L1+L2 on Python 3.11, 3.12, 3.13, 3.14 — green.

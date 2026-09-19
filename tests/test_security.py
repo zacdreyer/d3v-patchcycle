@@ -47,14 +47,14 @@ class TestT1CommandInjection:
         assert result.exit_code == 0
         assert not marker.exists()
 
-    def test_hook_argv_never_shell_interpreted(self, tmp_path):
+    def test_hook_argv_never_shell_interpreted(self, tmp_path, trusted_python):
         runner = HookRunner.__new__(HookRunner)
         from patchcycle.config import HooksConfig
 
         runner.config = HooksConfig(timeout_s=10)
         results = runner._run_one(
             (
-                str(Path(sys.executable).resolve()),
+                trusted_python,
                 "-c",
                 "import sys;sys.exit(0)",
                 "$(touch /tmp/pc-pwned)",
@@ -97,14 +97,14 @@ class TestT3EnvironmentManipulation:
         )
         assert result.exit_code == 0
 
-    def test_hook_env_is_minimal(self, monkeypatch):
+    def test_hook_env_is_minimal(self, monkeypatch, trusted_python):
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "canary-secret")
         from patchcycle.config import HooksConfig
 
         runner = HookRunner(HooksConfig(timeout_s=10))
         results = runner._run_one(
             (
-                str(Path(sys.executable).resolve()),
+                trusted_python,
                 "-c",
                 "import os,sys;sys.exit(0 if not os.environ.get('AWS_SECRET_ACCESS_KEY') else 9)",
             )

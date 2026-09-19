@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 from patchcycle.config import HooksConfig
@@ -16,26 +15,22 @@ def hook_cfg(**overrides) -> HooksConfig:
     return HooksConfig(**base)
 
 
-def py_hook(code: str) -> tuple[str, ...]:
-    return (str(Path(sys.executable).resolve()), "-c", code)
-
-
 class TestExecution:
-    def test_successful_hook(self):
+    def test_successful_hook(self, py_hook, trusted_python):
         runner = HookRunner(hook_cfg())
         results = runner.run_all((py_hook("print('hello')"),), "before_upgrade")
         assert len(results) == 1
         assert results[0].ok is True
         assert results[0].exit_code == 0
-        assert results[0].hook == str(Path(sys.executable).resolve())
+        assert results[0].hook == trusted_python
 
-    def test_failing_hook_captured(self):
+    def test_failing_hook_captured(self, py_hook):
         runner = HookRunner(hook_cfg())
         results = runner.run_all((py_hook("import sys; sys.exit(3)"),), "before_upgrade")
         assert results[0].ok is False
         assert results[0].exit_code == 3
 
-    def test_hook_timeout(self):
+    def test_hook_timeout(self, py_hook):
         runner = HookRunner(hook_cfg(timeout_s=1))
         results = runner.run_all((py_hook("import time; time.sleep(30)"),), "before_upgrade")
         assert results[0].ok is False
@@ -47,7 +42,7 @@ class TestExecution:
         assert results[0].ok is False
         assert "nonexistent" in results[0].stderr_tail or results[0].exit_code == -1
 
-    def test_environment_is_scrubbed(self, monkeypatch):
+    def test_environment_is_scrubbed(self, monkeypatch, py_hook):
         """T3: parent env secrets must not leak into hook processes."""
         monkeypatch.setenv("PATCHCYCLE_TEST_SECRET", "should-not-leak")
         monkeypatch.setenv("LD_PRELOAD", "/tmp/evil.so")
@@ -63,7 +58,7 @@ class TestExecution:
         )
         assert results[0].exit_code == 0
 
-    def test_no_shell_interpretation(self, tmp_path):
+    def test_no_shell_interpretation(self, tmp_path, py_hook):
         """T1: shell metacharacters in argv must not execute a shell."""
         marker = tmp_path / "pwned"
         runner = HookRunner(hook_cfg())
@@ -78,22 +73,22 @@ class TestExecution:
 
 
 class TestFailurePolicy:
-    def test_abort_policy(self):
+    def test_abort_policy(self, py_hook):
         runner = HookRunner(hook_cfg(failure_policy="abort"))
         failed = runner.run_all((py_hook("import sys; sys.exit(1)"),), "before_reboot")
         assert runner.should_abort(failed, "before_reboot") is True
 
-    def test_continue_policy(self):
+    def test_continue_policy(self, py_hook):
         runner = HookRunner(hook_cfg(failure_policy="continue"))
         failed = runner.run_all((py_hook("import sys; sys.exit(1)"),), "before_upgrade")
         assert runner.should_abort(failed, "before_upgrade") is False
 
-    def test_after_hooks_default_to_continue(self):
+    def test_after_hooks_default_to_continue(self, py_hook):
         runner = HookRunner(hook_cfg(failure_policy="abort"))
         failed = runner.run_all((py_hook("import sys; sys.exit(1)"),), "after_upgrade")
         assert runner.should_abort(failed, "after_upgrade") is False
 
-    def test_all_passing_never_aborts(self):
+    def test_all_passing_never_aborts(self, py_hook):
         runner = HookRunner(hook_cfg())
         ok = runner.run_all((py_hook("pass"),), "before_reboot")
         assert runner.should_abort(ok, "before_reboot") is False
